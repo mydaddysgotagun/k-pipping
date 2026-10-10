@@ -1,9 +1,9 @@
 {
- "name": "K-pipping",
- "short_name": "K-pipping",
+ "name": "k-pipping",
+ "short_name": "k-pipping",
  "description": "Заявки на доставку из VK-шопов",
  "display": "standalone",
- "background_color": "#f6f3f6",
+ "background_color": "#bfe6ee",
  "theme_color": "#8a3f6b",
  "start_url": "./",
  "scope": "./",

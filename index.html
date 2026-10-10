@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>K-pipping</title>
+<title>k-pipping</title>
 <meta name="theme-color" content="#8a3f6b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="K-pipping">
+<meta name="apple-mobile-web-app-title" content="k-pipping">
 <meta name="referrer" content="no-referrer">
-<link rel="icon" href="icon-192.png">
+<link rel="icon" href="logo.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -76,6 +76,19 @@ details.settings[open] > summary::after { content: "▴"; }
 .person { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
 .status { font-size: .85rem; } .ok { color: #2e7d32; } :root[data-theme="dark"] .ok { color: #81c784; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ok { color: #81c784; } }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.ph { position: relative; display: grid; gap: 4px; font-size: .78rem; min-width: 0; }
+.ph img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 2px solid transparent; background: var(--line); }
+.ph input { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; accent-color: var(--accent); }
+.ph input:checked + a img { border-color: var(--accent); }
+.ph .lbl { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ph .lbl.unsure { color: var(--warn); }
+.chipline { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: .8rem; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); font-variant-numeric: tabular-nums; }
+.pill.miss { background: var(--err-soft); }
+details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 40px; height: 40px; border-radius: 50%; flex: none; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -83,7 +96,7 @@ details.settings[open] > summary::after { content: "▴"; }
 <body>
 <main>
   <header>
-    <div><h1>K-pipping</h1><span class="hint">заявка на доставку · <span id="shopName"></span></span></div>
+    <div class="brand"><img class="logo" src="logo.png" alt="" width="40" height="40"><div><h1>k-pipping</h1><span class="hint">заявка на доставку · <span id="shopName"></span></span></div></div>
   </header>
 
   <div id="noToken" class="w warn" hidden><span class="tag">Настройка</span>Добавьте токен VK внизу, в «Настройках», — без него приложение не может читать посты.</div>
@@ -105,8 +118,8 @@ details.settings[open] > summary::after { content: "▴"; }
       </div>
     </div>
     <label class="f" for="boxes">Коробки
-      <input type="text" id="boxes" inputmode="text" autocomplete="off" placeholder="103 кор, 15 кит, 4 тай">
-      <span class="hint">Номер и страна через запятую. Можно в одной заявке несколько стран.</span>
+      <input type="text" id="boxes" inputmode="text" autocomplete="off" placeholder="105 кор, 15 кит">
+      <span class="hint">список коробок через запятую, пример - 105 кор, 15 кит</span>
     </label>
     <button type="button" class="primary" id="go">Составить заявку</button>
     <div id="progress" aria-live="polite"></div>
@@ -128,6 +141,22 @@ details.settings[open] > summary::after { content: "▴"; }
     <div id="warnWrap" hidden style="display:grid;gap:8px"><h2>Проверить</h2><div id="warns" style="display:grid;gap:8px"></div></div>
     <div><h2>Источники</h2><ul class="list src" id="sources"></ul></div>
     <button type="button" class="link" id="diag">Скопировать отчёт для отладки (без токена)</button>
+  </section>
+
+  <section class="card" id="photos" hidden aria-labelledby="h-ph">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="h-ph">Фото с получением</h2>
+      <button type="button" id="phStop" hidden>Остановить</button>
+    </div>
+    <p class="hint" id="phIntro" style="margin:0">Найду в альбомах коробок фото с номерами ваших разборов. Номера читаются прямо на телефоне; в первый раз загрузится модуль распознавания (несколько МБ).</p>
+    <button type="button" class="primary" id="phGo">Найти мои фото</button>
+    <div id="phProgress" class="hint" aria-live="polite"></div>
+    <div id="phResults" style="display:grid;gap:16px"></div>
+    <div id="phSave" class="row" hidden>
+      <button type="button" class="primary" id="phDownload" style="flex:1 1 200px">Скачать выбранные</button>
+      <button type="button" id="phShare" hidden>Поделиться…</button>
+    </div>
+    <span class="status" id="phStatus" role="status"></span>
   </section>
 
   <details class="card settings" id="settings">
@@ -547,7 +576,7 @@ details.settings[open] > summary::after { content: "▴"; }
     for (const b of boxes) {
       const label = `${b.country} ${b.num}`;
       prog(`Коробка ${label}: ищу оплату доставки…`);
-      const r = { box: b, label, orders: [], posts: [], ok: false };
+      const r = { box: b, label, orders: [], posts: [], allOrders: [], ok: false };
       boxRes.push(r);
       try {
         const notListed = held && held.size && !held.has(b.country + b.num);
@@ -572,10 +601,12 @@ details.settings[open] > summary::after { content: "▴"; }
           addSrc(`Оплата доставки ${label}${h.part ? ' (часть ' + h.part + ')' : ''}`, postLink(shop, p.id));
           r.posts.push(p.id);
           const fromPost = targetLinesInShipping(p.text || '', target);
+          for (const o of ordersInLine(p.text || '')) if (!r.allOrders.includes(o)) r.allOrders.push(o);
           let fromComments = { entries: [], ambiguous: [], namesakes: [] };
           try {
             const c = await api('wall.getComments', { owner_id: -shop.groupId, post_id: p.id, count: 100, sort: 'asc' });
             for (const cm of c.items.filter(x => x.from_id === -shop.groupId)) {
+              for (const o of ordersInLine(cm.text || '')) if (!r.allOrders.includes(o)) r.allOrders.push(o);
               const t = targetLinesInShipping(cm.text || '', target);
               fromComments.entries.push(...t.entries); fromComments.ambiguous.push(...t.ambiguous); fromComments.namesakes.push(...t.namesakes);
             }
@@ -612,8 +643,20 @@ details.settings[open] > summary::after { content: "▴"; }
         r.found = r.found || {};
         prog(`Ищу оплату разбора #${order} (${r.label})…`);
         try {
-          r.found[order] = await findPayment(shop, api, target, order, r.box.country, W, cache);
-          for (const f of r.found[order].posts) addSrc(`Оплата #${order}`, postLink(shop, f.id));
+          const wBefore = W.length;
+          const f = r.found[order] = await findPayment(shop, api, target, order, r.box.country, W, cache);
+          for (const x of f.posts) addSrc(`Оплата #${order}`, postLink(shop, x.id));
+          if (f.missing && !order.startsWith('колл')) {
+            prog(`#${order}: проверяю соседние номера (возможная опечатка)…`);
+            const sug = await findTypo(shop, api, target, order, r, boxRes, cache);
+            if (sug) {
+              f.suggest = sug;
+              W.splice(wBefore, W.length - wBefore);   // replace the "not found" error with the suggestion
+              W.push({ level: 'warn', text: `#${order}: получателя нет в оплате #${order}, но есть в оплате #${sug.order}, а #${sug.order} не встречается в других коробках получателя. Похоже на опечатку в посте доставки — в заявке указан #${sug.order}. Проверьте (поиск фото тоже подскажет).`,
+                links: [{ label: 'оплата #' + sug.order, url: postLink(shop, sug.posts[0].id) }, ...r.posts.map(id => ({ label: 'пост доставки ' + label(r), url: postLink(shop, id) }))] });
+              for (const x of sug.posts) addSrc(`Оплата #${sug.order} (вместо #${order})`, postLink(shop, x.id));
+            }
+          }
         } catch (e) { if (e instanceof FatalVkError) throw e;
           r.found[order] = { posts: [], error: errText(e) };
           W.push({ level: 'error', text: `#${order}: ошибка запроса — ${errText(e)}. Можно повторить.` });
@@ -627,7 +670,30 @@ details.settings[open] > summary::after { content: "▴"; }
     return { text, warnings: W, manual, sources, boxRes, topic, template };
   }
 
-  async function findPayment(shop, api, target, order, country, W, cache) {
+  const label = r => r.label;
+  // A recipient missing from order N's payment but present in N±1/N±2 usually means a typo in the shipping post.
+  // Accept the neighbour only if it isn't one of the recipient's orders in this or any other shipping post.
+  async function findTypo(shop, api, target, order, r, boxRes, cache) {
+    const mine = new Set(boxRes.flatMap(b => b.orders));
+    for (const d of [1, -1, 2, -2]) {
+      const m = String(+order + d);
+      if (mine.has(m)) continue;
+      const g = await findPayment(shop, api, target, m, r.box.country, [], cache, { noRange: true });
+      if (!g.posts.length) continue;
+      const ck = 'ws:#' + m;
+      const s = cache[ck] || (cache[ck] = await api('wall.search', { owner_id: -shop.groupId, query: '#' + m, count: 100 }));
+      const elsewhere = s.items.some(p => {
+        if (p.post_type === 'reply' || p.post_id || r.posts.includes(p.id)) return false;
+        const h = parseShippingHeader(shop, (p.text || '').split('\n')[0]);
+        return h && targetLinesInShipping(p.text || '', target).entries.some(e => e.orders.includes(m));
+      });
+      if (elsewhere) continue;
+      return { order: m, posts: g.posts, idents: g.idents, flags: g.flags };
+    }
+    return null;
+  }
+
+  async function findPayment(shop, api, target, order, country, W, cache, opts = {}) {
     const isKoll = order.startsWith('колл');
     const seen = new Map();
     const others = new Map();   // non-payment posts that mention the order (e.g. "свободные позиции")
@@ -645,7 +711,7 @@ details.settings[open] > summary::after { content: "▴"; }
     };
     await collect(queries[0], true);
     let cover = [...seen.values()].filter(x => headerCovers(x.h, order, country));
-    if (!cover.length && !isKoll) {
+    if (!cover.length && !isKoll && !opts.noRange) {
       // range posts whose start number is lower: "кор #5520-#5524"
       for (let d = 1; d <= 6 && !cover.length; d++) {
         await collect('#' + (+order - d));
@@ -714,21 +780,24 @@ details.settings[open] > summary::after { content: "▴"; }
   function orderLines(shop, r, needsListId, manual) {
     const out = [];
     for (const o of r.orders) {
-      const f = r.found && r.found[o];
-      let line = `#${o}`;
-      if (!f || f.missing || !f.posts.length) {
-        line += ` — [добавить ссылку на оплату #${o}]`;
-        if (needsListId) line += ` — [номер в оплате]`;
-      } else {
-        line += ' — ' + f.posts.map(p => postLink(shop, p.id)).join(' , ');
-        if (needsListId) {
-          const it = identText(f);
-          line += ' — ' + (it || '[номер в оплате]');
-          if (!it) manual.push(`Укажите ваш номер в оплате #${o}.`);
-        }
-        if (f.flags && f.flags.length) manual.push(`#${o}: позиция получена через ${f.flags.join('/')} — по правилам может понадобиться скриншот (пункт 7).`);
+      const f0 = r.found && r.found[o];
+      const f = f0 && f0.suggest ? f0.suggest : f0;
+      const num = f0 && f0.suggest ? f0.suggest.order : o;
+      if (f0 && f0.suggest) manual.push(`Проверьте опечатку: в посте доставки ${r.label} указан #${o}, в заявке — #${num}.`);
+      if (!f || f.missing || !f.posts || !f.posts.length) {
+        out.push(`#${num}` + (needsListId ? ' — [номер в оплате]' : ''));
+        out.push(`[добавить ссылку на оплату #${num}]`);
+        continue;
       }
-      out.push(line);
+      let head = `#${num}`;
+      if (needsListId) {
+        const it = identText(f);
+        head += ' — ' + (it || '[номер в оплате]');
+        if (!it) manual.push(`Укажите ваш номер в оплате #${num}.`);
+      }
+      out.push(head);
+      for (const p of f.posts) out.push(postLink(shop, p.id));
+      if (f.flags && f.flags.length) manual.push(`#${num}: позиция получена через ${f.flags.join('/')} — по правилам может понадобиться скриншот (пункт 7).`);
     }
     return out;
   }
@@ -740,7 +809,7 @@ details.settings[open] > summary::after { content: "▴"; }
     const boxList = boxRes.map(r => shop.boxLabel(r.box)).join(', ');
     for (const r of boxRes) for (const o of r.orders) {
       const f = r.found && r.found[o];
-      if (!f || f.missing) manual.push(`Добавьте ссылку на оплату #${o} (${r.label}).`);
+      if (!f || (f.missing && !f.suggest)) manual.push(`Добавьте ссылку на оплату #${o} (${r.label}).`);
     }
     for (const r of boxRes.filter(r => !r.orders.length)) manual.push(`Коробка ${r.label}: проверьте вручную (не найдено записей).`);
 
@@ -847,6 +916,314 @@ details.settings[open] > summary::after { content: "▴"; }
   const SHOPS = (root.SHIP_SHOPS = root.SHIP_SHOPS || {});
   SHOPS[shop.key] = shop;
   if (typeof module !== 'undefined' && module.exports) module.exports = shop;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* K-pipping — photo finder.
+ * Finds the "received" album of a box, reads the order number typed on each photo
+ * (Tesseract.js, on the device), and returns the photos showing the recipient's orders.
+ * Browser-only for the image part; the album-title parser also runs in Node (tests).
+ */
+(function (root) {
+  'use strict';
+
+  // ---------- Russian ordinal numbers in album titles ("сто третья корейская коробка") ----------
+  const UNITS = { 'перв': 1, 'втор': 2, 'трет': 3, 'четверт': 4, 'пят': 5, 'шест': 6, 'седьм': 7, 'восьм': 8, 'девят': 9 };
+  const TEENS = { 'десят': 10, 'одиннадцат': 11, 'двенадцат': 12, 'тринадцат': 13, 'четырнадцат': 14, 'пятнадцат': 15,
+    'шестнадцат': 16, 'семнадцат': 17, 'восемнадцат': 18, 'девятнадцат': 19 };
+  const TENS_ORD = { 'двадцат': 20, 'тридцат': 30, 'сороков': 40, 'пятидесят': 50, 'шестидесят': 60, 'семидесят': 70, 'восьмидесят': 80, 'девяност': 90 };
+  const TENS_CARD = { 'двадцать': 20, 'тридцать': 30, 'сорок': 40, 'пятьдесят': 50, 'шестьдесят': 60, 'семьдесят': 70, 'восемьдесят': 80, 'девяносто': 90 };
+  const HUND_CARD = { 'сто': 100, 'двести': 200, 'триста': 300 };
+  const HUND_ORD = { 'сот': 100, 'двухсот': 200, 'трехсот': 300 };
+  const norm = s => String(s || '').toLowerCase().replace(/ё/g, 'е');
+
+  function parseOrdinalWords(words) {
+    let total = 0, used = 0;
+    for (const w of words) {
+      if (HUND_CARD[w] !== undefined) { total += HUND_CARD[w]; used++; continue; }
+      if (TENS_CARD[w] !== undefined) { total += TENS_CARD[w]; used++; continue; }
+      const stem = (dict) => Object.keys(dict).sort((a, b) => b.length - a.length).find(k => w.startsWith(k) && /^[а-я]{1,4}$/.test(w.slice(k.length)));
+      let k;
+      if ((k = stem(TEENS))) { total += TEENS[k]; used++; return used ? total : null; }
+      if ((k = stem(TENS_ORD))) { total += TENS_ORD[k]; used++; return total; }
+      if ((k = stem(HUND_ORD))) { total += HUND_ORD[k]; used++; return total; }
+      if ((k = stem(UNITS))) { total += UNITS[k]; used++; return total; }
+      if (used) return null;    // unknown word inside the number
+    }
+    return null;
+  }
+
+  const COUNTRY_WORDS = { 'корейск': 'кор', 'китайск': 'кит', 'тайск': 'тай', 'японск': 'яп', 'филиппинск': 'фил' };
+  // Returns {country, num, part, emojiPrefix} or null.
+  function parseAlbumTitle(title) {
+    const t = norm(title).replace(/[︎️‍]/g, '');
+    // short form: "кор7.2 (вторая часть ...)"
+    let m = t.match(/(кор|кит|тай|яп)\s*(\d+)(?:\.(\d+))?/);
+    if (m && !/коробк/.test(t.slice(0, m.index))) return { country: m[1], num: +m[2], part: m[3] ? +m[3] : null };
+    const words = t.match(/[а-я]+/g) || [];
+    const ci = words.findIndex(w => Object.keys(COUNTRY_WORDS).some(c => w.startsWith(c)));
+    if (ci < 0 || !/коробк/.test(t)) return null;
+    const country = COUNTRY_WORDS[Object.keys(COUNTRY_WORDS).find(c => words[ci].startsWith(c))];
+    const num = parseOrdinalWords(words.slice(0, ci).filter(w => w !== 'и'));
+    const dm = t.match(/(\d+)\s*(кор|кит|тай|яп)/);
+    if (num == null && dm) return { country, num: +dm[1], part: null };
+    return num == null ? null : { country, num, part: null };
+  }
+
+  function findAlbums(albums, box, adminEmoji) {
+    const em = String(adminEmoji || '').replace(/[︎️‍]/g, '');
+    const hits = albums.map(a => ({ a, p: parseAlbumTitle(a.title) }))
+      .filter(x => x.p && x.p.country === box.country && x.p.num === box.num);
+    const withEmoji = hits.filter(x => !em || x.a.title.replace(/[︎️‍]/g, '').includes(em));
+    return { albums: (withEmoji.length ? withEmoji : hits).map(x => x.a), emojiMatched: withEmoji.length > 0 };
+  }
+
+  // ---------- image analysis (browser) ----------
+  function lumSat(data, n) {
+    const lum = new Float32Array(n), sat = new Float32Array(n);
+    for (let i = 0, j = 0; j < n; i += 4, j++) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      lum[j] = 0.299 * r + 0.587 * g + 0.114 * b; sat[j] = Math.max(r, g, b) - Math.min(r, g, b);
+    }
+    return { lum, sat };
+  }
+  // text masks: 'light' = white text, 'adapt' = brighter than surroundings (white text on light fur), 'dark' = dark text on labels
+  function mask(ctx, W, H, mode, p) {
+    const N = W * H; const { lum, sat } = lumSat(ctx.getImageData(0, 0, W, H).data, N); const m = new Uint8Array(N);
+    if (mode === 'light') { for (let j = 0; j < N; j++) m[j] = (lum[j] > p.thr && sat[j] < 45) ? 1 : 0; return m; }
+    if (mode === 'dark') { for (let j = 0; j < N; j++) m[j] = lum[j] < p.thr ? 1 : 0; return m; }
+    const R = p.r, S = new Float64Array((W + 1) * (H + 1));
+    for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += lum[y * W + x]; S[(y + 1) * (W + 1) + x + 1] = S[y * (W + 1) + x + 1] + row; } }
+    for (let y = 0; y < H; y++) {
+      const y0 = Math.max(0, y - R), y1 = Math.min(H, y + R + 1);
+      for (let x = 0; x < W; x++) {
+        const x0 = Math.max(0, x - R), x1 = Math.min(W, x + R + 1);
+        const mean = (S[y1 * (W + 1) + x1] - S[y0 * (W + 1) + x1] - S[y1 * (W + 1) + x0] + S[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+        const j = y * W + x; m[j] = (lum[j] > p.min && lum[j] > mean + p.d && sat[j] < 50) ? 1 : 0;
+      }
+    }
+    return m;
+  }
+  // connected components -> glyph-sized blobs -> horizontal text lines
+  function textLines(m, W, H) {
+    const lab = new Int32Array(W * H); let n = 0; const comps = []; const st = [];
+    for (let p = 0; p < W * H; p++) {
+      if (!m[p] || lab[p]) continue;
+      n++; let x0 = W, y0 = H, x1 = 0, y1 = 0, cnt = 0; st.push(p); lab[p] = n;
+      while (st.length) {
+        const q = st.pop(), qx = q % W, qy = (q / W) | 0; cnt++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        if (qx > 0 && m[q - 1] && !lab[q - 1]) { lab[q - 1] = n; st.push(q - 1); }
+        if (qx < W - 1 && m[q + 1] && !lab[q + 1]) { lab[q + 1] = n; st.push(q + 1); }
+        if (qy > 0 && m[q - W] && !lab[q - W]) { lab[q - W] = n; st.push(q - W); }
+        if (qy < H - 1 && m[q + W] && !lab[q + W]) { lab[q + W] = n; st.push(q + W); }
+      }
+      comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, cnt });
+    }
+    const glyphs = comps.filter(o => o.h >= Math.max(8, H * 0.012) && o.h <= H * 0.15 && o.w >= o.h * 0.12 && o.w <= o.h * 1.4 &&
+      o.cnt / (o.w * o.h) > 0.12 && o.cnt / (o.w * o.h) < 0.9).sort((p, q) => p.x0 - q.x0);
+    const lines = [];
+    for (const g of glyphs) {
+      const cy = (g.y0 + g.y1) / 2;
+      const L = lines.find(l => Math.abs(l.cy - cy) < g.h * 0.35 && Math.abs(l.h - g.h) < g.h * 0.5 && g.x0 - l.x1 < g.h * 0.9 && g.x0 >= l.x1 - g.h * 0.3);
+      if (L) { L.n++; L.g.push(g); L.x1 = Math.max(L.x1, g.x1); L.y0 = Math.min(L.y0, g.y0); L.y1 = Math.max(L.y1, g.y1); L.cy = (L.y0 + L.y1) / 2; L.h = (L.h * (L.n - 1) + g.h) / L.n; }
+      else lines.push({ n: 1, g: [g], x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, cy, h: g.h });
+    }
+    // split lines into words at gaps wider than a space: "#2392 [7 сетов]" -> "#2392", "[7", "сетов]"
+    const words = [];
+    for (const l of lines) {
+      let cur = null;
+      for (const g of l.g) {
+        if (cur && g.x0 - cur.x1 <= l.h * 0.38) { cur.n++; cur.x1 = Math.max(cur.x1, g.x1); cur.y0 = Math.min(cur.y0, g.y0); cur.y1 = Math.max(cur.y1, g.y1); }
+        else { cur = { n: 1, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1, h: l.h, cy: l.cy }; words.push(cur); }
+      }
+    }
+    return words.filter(w => w.n >= 4 && w.n <= 12).sort((a, b) => b.h - a.h);
+  }
+  function crop(img, L, k, targetH) {
+    const pad = L.h * 0.4;
+    const sx = Math.max(0, (L.x0 - pad) / k), sy = Math.max(0, (L.y0 - pad) / k);
+    const sw = Math.min(img.width - sx, (L.x1 - L.x0 + 2 * pad) / k), sh = Math.min(img.height - sy, (L.y1 - L.y0 + 2 * pad) / k);
+    const s = targetH / sh, c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(sw * s)); c.height = Math.max(1, Math.round(sh * s));
+    c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    return c;
+  }
+  function variant(c, kind, mode, p) {
+    const W = c.width, H = c.height, x = c.getContext('2d');
+    const { lum } = lumSat(x.getImageData(0, 0, W, H).data, W * H);
+    const o = document.createElement('canvas'); o.width = W; o.height = H; const ox = o.getContext('2d'); const d = ox.createImageData(W, H);
+    const put = (j, v) => { d.data[4 * j] = d.data[4 * j + 1] = d.data[4 * j + 2] = v; d.data[4 * j + 3] = 255; };
+    if (kind === 'inv' || kind === 'gray') {
+      let lo = 255, hi = 0; for (const v of lum) { if (v < lo) lo = v; if (v > hi) hi = v; }
+      const span = Math.max(1, hi - lo);
+      for (let j = 0; j < W * H; j++) { let v = (lum[j] - lo) / span * 255; if (kind === 'inv') v = 255 - v; put(j, v); }
+    } else {
+      const pp = mode === 'adapt' ? { min: p.min, d: p.d, r: Math.round(H * 0.6) } : p;
+      const m = mask(x, W, H, mode, pp); for (let j = 0; j < W * H; j++) put(j, m[j] ? 0 : 255);
+    }
+    ox.putImageData(d, 0, 0); return o;
+  }
+
+  const PASSES = [['light', { thr: 200 }], ['adapt', { min: 205, d: 28, r: 20 }], ['adapt', { min: 185, d: 22, r: 20 }], ['dark', { thr: 80 }], ['light', { thr: 165 }]];
+  // [crop height, image variant, tesseract page mode]: single word (8) or single line (7, keeps "#1617 [2 сета]" apart)
+  const VARIANTS = [[64, 'mask', '8'], [110, 'inv', '8'], [64, 'inv', '7'], [110, 'mask', '7'], [48, 'gray', '7'], [80, 'gray', '8']];
+
+  // Reader: one digits worker, one Russian worker (for "#колл284"), created lazily.
+  function createReader(Tesseract, onStatus) {
+    let dig = null, rus = null;
+    async function digits() {
+      if (!dig) { onStatus && onStatus('Загружаю распознавание цифр…'); dig = await Tesseract.createWorker('eng', 1, { workerBlobURL: true }); await dig.setParameters({ tessedit_char_whitelist: '#0123456789[]', tessedit_pageseg_mode: '8' }); dig.psm = '8'; }
+      return dig;
+    }
+    async function russian() {
+      if (!rus) { onStatus && onStatus('Загружаю распознавание «колл»…'); rus = await Tesseract.createWorker('rus', 1, { workerBlobURL: true }); await rus.setParameters({ tessedit_char_whitelist: '#кол0123456789.', tessedit_pageseg_mode: '7' }); }
+      return rus;
+    }
+    return { digits, russian, async close() { if (dig) await dig.terminate(); if (rus) await rus.terminate(); dig = rus = null; } };
+  }
+
+  // Normalise OCR text to an order token: "4076" or "колл284" / "колл308.4"
+  function tokenFromDigits(t) {
+    const raw = String(t || '').trim();
+    // "#колл284" read by the digits-only engine comes out as "#01284" or "#284": treat as a collective label
+    if (/^#\s*0\d{3,}/.test(raw.replace(/\s+/g, ''))) return { koll: true };
+    if (/#\s?\d{3}(?![\d])/.test(raw) && !/#\s?\d{4}/.test(raw)) return { koll: true };
+    const m = raw.match(/#\s?(\d{4,5})(?![\d])/) || raw.replace(/\s+/g, '').match(/^(\d{4})$/);
+    if (!m) return null;
+    return { tok: m[1], hash: raw.includes('#') };
+  }
+  // "#колл238.2" -> "колл238.2". OCR often drops the dot ("колл2382"): use the box's known collectives to put it back.
+  function tokenFromRussian(t, known) {
+    const m = t.replace(/\s+/g, '').match(/#?к?о?л{1,2}\.?(\d{2,4})(?:\.(\d{1,2}))?/);
+    if (!m) return null;
+    const exact = 'колл' + m[1] + (m[2] ? '.' + m[2] : '');
+    if (!known || !known.size || known.has(exact)) return exact;
+    if (!m[2]) {   // "колл238" when the box only has "колл238.2" -> that one
+      const subs = [...known].filter(k => k.startsWith(exact + '.'));
+      if (subs.length === 1) return subs[0];
+      if (subs.length > 1) return exact;
+    }
+    const d = m[1];
+    for (const cut of [1, 2]) {
+      if (d.length - cut < 2) continue;
+      const alt = 'колл' + d.slice(0, -cut) + '.' + d.slice(-cut);
+      if (known.has(alt)) return alt;
+    }
+    return exact;
+  }
+  // Closest known order within one wrong digit (same length) — only if unique.
+  function fuzzyKnown(tok, known) {
+    if (!known || !known.size || tok.startsWith('колл')) return null;
+    const c = [...known].filter(k => !k.startsWith('колл') && k.length === tok.length && [...k].filter((ch, i) => ch !== tok[i]).length === 1);
+    return c.length === 1 ? c[0] : null;
+  }
+
+  // Read one photo. Returns {tokens:[{tok, votes, conf, fuzzy}], koll:boolean}
+  async function readPhoto(reader, img, known) {
+    const k = Math.min(1, 1000 / img.width), W = Math.round(img.width * k), H = Math.round(img.height * k);
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, W, H);
+    const votes = new Map(); const seenLines = [];
+    const add = (tok, conf, fuzzy) => { const v = votes.get(tok) || { tok, votes: 0, conf: 0, fuzzy }; v.votes++; v.conf = Math.max(v.conf, conf); if (!fuzzy) v.fuzzy = false; votes.set(tok, v); };
+    // done when a number in the box list was read twice, or any '#'-number was read the same way three times
+    const settled = () => [...votes.values()].some(v => !v.fuzzy && (known && known.has(v.tok) ? v.votes >= 2 : v.votes >= 3));
+    const dig = await reader.digits();
+    for (const [mode, p] of PASSES) {
+      const lines = textLines(mask(ctx, W, H, mode, p), W, H).slice(0, 6);
+      for (const L of lines) {
+        if (seenLines.some(b => Math.abs(b.cy - L.cy) < L.h * 0.5 && Math.abs(b.x0 - L.x0) < L.h)) continue;
+        seenLines.push(L);
+        let kollHint = L.n >= 7;
+        for (const [h, kind, psm] of VARIANTS) {
+          if (dig.psm !== psm) { await dig.setParameters({ tessedit_pageseg_mode: psm }); dig.psm = psm; }
+          const r = await dig.recognize(variant(crop(img, L, k, h), kind, mode, p));
+          const t = tokenFromDigits(r.data.text || '');
+          if (!t) continue;
+          if (t.koll) { kollHint = true; continue; }
+          if (known && known.size && !known.has(t.tok)) {
+            const f = fuzzyKnown(t.tok, known);
+            if (f) add(f, r.data.confidence, true);
+            if (t.hash) add(t.tok, r.data.confidence, false);   // a real number that isn't in the box list (old orders, consolidations)
+          } else add(t.tok, r.data.confidence, false);
+          if (settled()) break;
+        }
+        if (kollHint) {
+          const rus = await reader.russian();
+          for (const [h, kind] of [[80, 'inv'], [64, 'mask'], [110, 'inv']]) {
+            const r = await rus.recognize(variant(crop(img, L, k, h), kind, mode, p));
+            const t = tokenFromRussian(r.data.text || '', known);
+            if (t) { add(t, r.data.confidence, false); if (votes.get(t).votes >= 2) break; }
+          }
+        }
+        if (settled()) break;
+      }
+      if (settled()) break;
+    }
+    const isKnown = tok => known && (known.has(tok) || (tok.startsWith('колл') && [...known].some(x => x.startsWith(tok + '.'))));
+    const keep = [...votes.values()].filter(v => isKnown(v.tok) ? true : v.votes >= 2);
+    // a fuzzy correction only counts if nothing exact was read for the same line
+    const exact = keep.filter(v => !v.fuzzy);
+    return { tokens: (exact.length ? exact : keep).sort((a, b) => b.votes - a.votes || b.conf - a.conf) };
+  }
+
+  function loadImage(url) {
+    return new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => rej(new Error('Не удалось загрузить фото')); i.src = url; });
+  }
+  function bestUrl(photo, minW) {
+    const s = [...(photo.sizes || [])].sort((a, b) => a.width - b.width);
+    return (s.find(x => x.width >= minW) || s[s.length - 1] || {}).url;
+  }
+  // Does a photo token belong to the recipient's order? ("колл308" in the shipping list covers "колл308.4" on a photo)
+  function tokenMatchesOrder(tok, order) {
+    return tok === order || (order.startsWith('колл') && (tok.startsWith(order + '.') || order.startsWith(tok + '.')));
+  }
+
+  /* Scan the boxes.
+   * boxes: [{box:{country,num}, label, orders:[mine], known:Set(all orders in the box)}]
+   * cache: object persisted by the caller: photoId -> tokens
+   */
+  async function scan({ api, shop, adminEmoji, boxes, Tesseract, cache = {}, onProgress = () => {}, shouldStop = () => false }) {
+    const out = { boxes: [], warnings: [] };
+    const reader = createReader(Tesseract, onProgress);
+    try {
+      onProgress('Ищу альбомы с получением…');
+      const albums = [];
+      for (let off = 0; ; ) { const r = await api('photos.getAlbums', { owner_id: -shop.groupId, offset: off, count: 100 }); albums.push(...r.items); off += r.items.length; if (!r.items.length || off >= r.count) break; }
+      for (const b of boxes) {
+        const res = { label: b.label, box: b.box, orders: b.orders, albums: [], matches: [], unread: [], missing: [], scanned: 0, total: 0 };
+        out.boxes.push(res);
+        const f = findAlbums(albums, b.box, adminEmoji);
+        if (!f.albums.length) { out.warnings.push({ level: 'error', text: `Альбом с получением для ${b.label} не найден.` }); res.missing = [...b.orders]; continue; }
+        if (!f.emojiMatched) out.warnings.push({ level: 'warn', text: `Альбом ${b.label} найден, но без эмодзи ${adminEmoji} в названии — проверьте.` });
+        res.albums = f.albums.map(a => ({ id: a.id, title: a.title, url: `https://${shop.linkDomain}/album-${shop.groupId}_${a.id}` }));
+        const photos = [];
+        for (const a of f.albums) for (let off = 0; ; ) { const r = await api('photos.get', { owner_id: -shop.groupId, album_id: a.id, count: 1000, offset: off }); photos.push(...r.items); off += r.items.length; if (!r.items.length || off >= r.count) break; }
+        res.total = photos.length;
+        for (const p of photos) {
+          if (shouldStop()) { out.stopped = true; break; }
+          res.scanned++;
+          onProgress(`${b.label}: фото ${res.scanned} из ${photos.length}`);
+          let toks = cache[p.id];
+          if (!toks) {
+            try { const img = await loadImage(bestUrl(p, 1280)); toks = (await readPhoto(reader, img, b.known)).tokens.map(t => ({ tok: t.tok, votes: t.votes, fuzzy: !!t.fuzzy })); cache[p.id] = toks; }
+            catch (e) { res.unread.push({ id: p.id, thumb: bestUrl(p, 300), full: bestUrl(p, 2560), err: String(e.message || e) }); continue; }
+          }
+          const item = { id: p.id, thumb: bestUrl(p, 400), full: bestUrl(p, 2560), tokens: toks.map(t => t.tok), fuzzy: toks.some(t => t.fuzzy) };
+          if (!toks.length) { res.unread.push(item); continue; }
+          const mine = b.orders.filter(o => toks.some(t => tokenMatchesOrder(t.tok, o)));
+          if (mine.length) res.matches.push({ ...item, orders: mine });
+        }
+        res.missing = b.orders.filter(o => !res.matches.some(m => m.orders.includes(o)));
+        if (shouldStop()) break;
+      }
+    } finally { await reader.close(); }
+    return out;
+  }
+
+  const api = { parseAlbumTitle, parseOrdinalWords, findAlbums, tokenFromDigits, tokenFromRussian, fuzzyKnown, tokenMatchesOrder, readPhoto, createReader, loadImage, bestUrl, scan };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.ShipPhotos = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -975,6 +1352,8 @@ details.settings[open] > summary::after { content: "▴"; }
     $('warnWrap').hidden = !W.children.length;
     const src = $('sources'); src.textContent = '';
     (r.sources || []).forEach(s => src.append(el('li', {}, el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.label))));
+    $('photos').hidden = !(r.boxRes || []).some(b => !b.wrongAdmin && b.orders.length);
+    $('phResults').textContent = ''; $('phSave').hidden = true; $('phProgress').textContent = ''; $('phGo').textContent = 'Найти мои фото';
     const unresolved = (r.boxRes || []).some(b => b.error || Object.values(b.found || {}).some(f => f.error || f.missing));
     $('retry').hidden = !unresolved;
   }
@@ -1012,6 +1391,102 @@ details.settings[open] > summary::after { content: "▴"; }
     setTimeout(() => { statusEl.textContent = ''; }, 4000);
   }
 
+
+  // ---------- photos of received items ----------
+  const PKEY = 'vkship.photocache.v1';
+  const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  let photoCache; try { photoCache = JSON.parse(ls.get(PKEY) || '{}'); } catch (e) { photoCache = {}; }
+  const savePhotoCache = () => {
+    const keys = Object.keys(photoCache);
+    if (keys.length > 6000) for (const k of keys.slice(0, keys.length - 6000)) delete photoCache[k];
+    ls.set(PKEY, JSON.stringify(photoCache));
+  };
+  function loadTesseract() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    return new Promise((res, rej) => {
+      const sc = document.createElement('script'); sc.src = TESSERACT_URL; sc.crossOrigin = 'anonymous';
+      sc.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error('модуль распознавания не загрузился'));
+      sc.onerror = () => rej(new Error('Нет связи с cdn.jsdelivr.net — модуль распознавания не загрузился'));
+      document.head.appendChild(sc);
+    });
+  }
+  let phStop = false, phRunning = false, phLast = null;
+  function photoTile(item, label, unsure, checked) {
+    const id = 'ph' + item.id;
+    return el('div', { class: 'ph' },
+      el('input', Object.assign({ type: 'checkbox', id, 'aria-label': 'выбрать фото ' + label, 'data-full': item.full, 'data-name': label }, checked ? { checked: '' } : {})),
+      el('a', { href: item.full, target: '_blank', rel: 'noopener noreferrer' }, el('img', { src: item.thumb, alt: label, loading: 'lazy', referrerpolicy: 'no-referrer' })),
+      el('span', { class: 'lbl' + (unsure ? ' unsure' : '') }, label));
+  }
+  function renderPhotos(res) {
+    const box = $('phResults'); box.textContent = '';
+    for (const w of res.warnings || []) box.append(el('div', { class: 'w ' + w.level }, scrub(w.text)));
+    for (const b of res.boxes) {
+      const head = el('div', { class: 'row', style: 'justify-content:space-between' },
+        el('strong', {}, b.label), b.albums.length ? el('a', { href: b.albums[0].url, target: '_blank', rel: 'noopener noreferrer', style: 'font-size:.85rem' }, 'альбом') : null);
+      const sec = el('div', { style: 'display:grid;gap:8px' }, head);
+      const found = b.orders.filter(o => !b.missing.includes(o));
+      const was = o => (res.typo || {})[b.box.country + b.box.num + ':' + o];
+      sec.append(el('div', { class: 'chipline' },
+        found.map(o => el('span', { class: 'pill' }, '#' + o + ' ✓' + (was(o) ? ` (в посте доставки #${was(o)} — фото подтверждает #${o})` : ''))),
+        b.missing.map(o => el('span', { class: 'pill miss' }, '#' + o + ' — нет фото' + (was(o) ? ` (в посте доставки #${was(o)})` : '')))));
+      if (b.matches.length) sec.append(el('div', { class: 'grid' }, b.matches.map(m => photoTile(m, b.box.country + b.box.num + ' ' + m.orders.map(o => '#' + o).join(' '), m.fuzzy, true))));
+      if (b.total) sec.append(el('span', { class: 'hint' }, `Просмотрено ${b.scanned} из ${b.total} фото.`));
+      if (b.unread.length) sec.append(el('details', { class: 'more' },
+        el('summary', {}, `Номер не прочитан на ${b.unread.length} фото — посмотрите, нет ли там ваших`),
+        el('div', { class: 'grid', style: 'margin-top:8px' }, b.unread.map(u => photoTile(u, 'фото ' + u.id, true, false)))));
+      box.append(sec);
+    }
+    const any = !!document.querySelector('#phResults input[type=checkbox]');
+    $('phSave').hidden = !any;
+    $('phShare').hidden = !(navigator.canShare && window.File);
+    updateSaveCount();
+  }
+  function updateSaveCount() {
+    const n = document.querySelectorAll('#phResults input[type=checkbox]:checked').length;
+    $('phDownload').textContent = n ? `Скачать выбранные (${n})` : 'Скачать выбранные';
+    $('phDownload').disabled = !n; $('phShare').disabled = !n;
+  }
+  async function selectedFiles() {
+    const boxes = [...document.querySelectorAll('#phResults input[type=checkbox]:checked')];
+    const files = [];
+    for (const [i, cb] of boxes.entries()) {
+      $('phStatus').textContent = `Загружаю ${i + 1} из ${boxes.length}…`; $('phStatus').className = 'status';
+      const r = await fetch(cb.dataset.full, { referrerPolicy: 'no-referrer' });
+      if (!r.ok) throw new Error('VK не отдал фото (' + r.status + ')');
+      const blob = await r.blob();
+      const name = cb.dataset.name.replace(/[^\p{L}\p{N}#._ -]+/gu, '').replace(/\s+/g, '_').slice(0, 60) + '.jpg';
+      files.push(new File([blob], name, { type: blob.type || 'image/jpeg' }));
+    }
+    return files;
+  }
+  async function runPhotos() {
+    if (phRunning || !last) return;
+    const r = last.r;
+    // a suspected typo (#4261 in the shipping post, recipient paid #4262) -> look for the corrected number's photo
+    const typo = {};
+    const boxes = (r.boxRes || []).filter(b => !b.wrongAdmin && b.orders.length).map(b => {
+      const orders = b.orders.map(o => { const sg = b.found && b.found[o] && b.found[o].suggest; if (sg) { typo[b.box.country + b.box.num + ':' + sg.order] = o; return sg.order; } return o; });
+      return { box: b.box, label: shop().boxLabel(b.box), orders, known: new Set([...(b.allOrders || []), ...orders]) };
+    });
+    if (!boxes.length) { $('phProgress').textContent = 'Нет заказов, для которых искать фото.'; return; }
+    phRunning = true; phStop = false; $('phGo').disabled = true; $('phStop').hidden = false; $('phResults').textContent = ''; $('phSave').hidden = true;
+    const prog = m => { $('phProgress').textContent = m; };
+    try {
+      prog('Загружаю модуль распознавания…');
+      const T = await loadTesseract();
+      let tick = 0;
+      const res = await window.ShipPhotos.scan({ api, shop: shop(), adminEmoji: last.admin, boxes, Tesseract: T, cache: photoCache,
+        onProgress: m => { prog(m); if (++tick % 10 === 0) savePhotoCache(); }, shouldStop: () => phStop });
+      savePhotoCache(); phLast = res; res.typo = typo;
+      renderPhotos(res);
+      const total = res.boxes.reduce((s, b) => s + b.orders.length, 0), got = res.boxes.reduce((s, b) => s + b.orders.length - b.missing.length, 0);
+      prog((res.stopped ? 'Остановлено. ' : '') + `Найдены фото для ${got} из ${total} разборов.`);
+    } catch (e) {
+      prog('Не получилось: ' + scrub(e && (e.error_msg || e.message) || e));
+    } finally { phRunning = false; $('phGo').disabled = false; $('phStop').hidden = true; $('phGo').textContent = 'Искать заново'; }
+  }
+
   // ---------- wiring ----------
   $('target').addEventListener('change', e => { S.targetIdx = +e.target.value; save(); });
   $('shop').addEventListener('change', e => { S.shopKey = e.target.value; S.admin = ''; save(); renderShops(); renderAdmins(); });
@@ -1032,6 +1507,28 @@ details.settings[open] > summary::after { content: "▴"; }
       '', '--- Источники ---', ...(r.sources || []).map(s => s.label + ': ' + s.url),
       '', '--- Разбор по коробкам ---', ...(r.boxRes || []).map(b => `${b.label}: ${b.orders.map(o => '#' + o + '→' + ((b.found && b.found[o] && b.found[o].posts.map(p => p.id).join('/')) || '—')).join(', ')}${b.error ? ' (ошибка: ' + b.error + ')' : ''}`)].join('\n');
     copyText(scrub(rep), $('copyStatus'), 'Отчёт скопирован.');
+  });
+  $('phGo').addEventListener('click', runPhotos);
+  $('phStop').addEventListener('click', () => { phStop = true; $('phProgress').textContent = 'Останавливаю…'; });
+  $('phResults').addEventListener('change', updateSaveCount);
+  $('phDownload').addEventListener('click', async () => {
+    const st = $('phStatus');
+    try {
+      const files = await selectedFiles();
+      for (const f of files) {
+        const url = URL.createObjectURL(f); const a = el('a', { href: url, download: f.name }); document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 30000); await new Promise(r => setTimeout(r, 400));
+      }
+      st.textContent = `Сохранено файлов: ${files.length}. Они в «Загрузках» и в галерее (альбом Download).`; st.className = 'status ok';
+    } catch (e) { st.textContent = 'Не получилось сохранить: ' + (e.message || e); st.className = 'status'; }
+  });
+  $('phShare').addEventListener('click', async () => {
+    const st = $('phStatus');
+    try {
+      const files = await selectedFiles();
+      if (!navigator.canShare({ files })) throw new Error('телефон не поддерживает отправку файлов из браузера');
+      await navigator.share({ files }); st.textContent = '';
+    } catch (e) { if (e && e.name === 'AbortError') { st.textContent = ''; return; } st.textContent = 'Не получилось: ' + (e.message || e); st.className = 'status'; }
   });
   $('token').value = '';
   $('saveToken').addEventListener('click', () => {
