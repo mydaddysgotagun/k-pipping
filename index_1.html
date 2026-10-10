@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>K-pipping</title>
+<meta name="theme-color" content="#8a3f6b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="K-pipping">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow column, form → progress → result; settings tucked in a sheet at the bottom. */
+:root {
+  --bg: #f6f3f6; --surface: #ffffff; --fg: #221b24; --muted: #6e6272; --line: #e4dbe4;
+  --accent: #8a3f6b; --accent-fg: #ffffff; --accent-soft: #f3e6ee;
+  --err: #b3261e; --err-soft: #fbe9e7; --warn: #8a5a00; --warn-soft: #fdf1d8; --info: #3c5a8a; --info-soft: #e8eef8;
+  --font: "Golos Text", "Segoe UI", Roboto, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161217; --surface: #211b23; --fg: #efe8f0; --muted: #a497a8; --line: #392f3c;
+  --accent: #e48dbd; --accent-fg: #2a0f1f; --accent-soft: #3a2232;
+  --err: #ff8a80; --err-soft: #3b1c1a; --warn: #f2c26b; --warn-soft: #382c14; --info: #9db8e8; --info-soft: #1d2638; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161217; --surface: #211b23; --fg: #efe8f0; --muted: #a497a8; --line: #392f3c;
+  --accent: #e48dbd; --accent-fg: #2a0f1f; --accent-soft: #3a2232;
+  --err: #ff8a80; --err-soft: #3b1c1a; --warn: #f2c26b; --warn-soft: #382c14; --info: #9db8e8; --info-soft: #1d2638; color-scheme: dark }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 var(--font);
+  padding-block: calc(env(safe-area-inset-top, 0px) + 12px) calc(env(safe-area-inset-bottom, 0px) + 32px); padding-inline: 16px; }
+main { max-width: 560px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 1.35rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; min-width: 0; }
+label.f { display: grid; gap: 6px; font-size: .9rem; font-weight: 500; }
+.hint { font-size: .8rem; color: var(--muted); font-weight: 400; }
+select, input[type=text], input[type=password], textarea {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px; width: 100%; min-width: 0; }
+textarea { resize: vertical; }
+select:focus, input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > select { flex: 1 1 200px; }
+button { font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 10px 14px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); padding: 14px; font-size: 1.05rem; width: 100%; }
+button[disabled] { opacity: .55; cursor: default; }
+button.link { border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-width: 46px; height: 46px; padding: 0 10px; font-size: 1.35rem; border-radius: 23px; line-height: 1; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+#progress { font-size: .88rem; color: var(--muted); display: grid; gap: 2px; max-height: 9.5em; overflow: auto; font-variant-numeric: tabular-nums; }
+#progress .now { color: var(--fg); font-weight: 500; }
+#out { min-height: 18rem; font: 15px/1.5 var(--font); background: var(--surface); overflow-wrap: anywhere; }
+.list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.list li { font-size: .92rem; overflow-wrap: anywhere; }
+.todo li { display: flex; gap: 8px; } .todo li::before { content: "□"; color: var(--accent); }
+.w { border-radius: 10px; padding: 10px 12px; font-size: .9rem; white-space: pre-wrap; overflow-wrap: anywhere; border-left: 4px solid; }
+.w.error { background: var(--err-soft); border-color: var(--err); } .w.warn { background: var(--warn-soft); border-color: var(--warn); } .w.info { background: var(--info-soft); border-color: var(--info); }
+.w a, .src a { color: var(--accent); }
+.w .links { display: grid; gap: 2px; margin-top: 4px; }
+.tag { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
+.w.error .tag { color: var(--err); } .w.warn .tag { color: var(--warn); } .w.info .tag { color: var(--info); }
+.fatal { background: var(--err-soft); border: 1px solid var(--err); color: var(--fg); border-radius: var(--r); padding: 14px; }
+details.settings > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+details.settings > summary::after { content: "▾"; color: var(--muted); }
+details.settings[open] > summary::after { content: "▴"; }
+.person { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
+.status { font-size: .85rem; } .ok { color: #2e7d32; } :root[data-theme="dark"] .ok { color: #81c784; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ok { color: #81c784; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>K-pipping</h1><span class="hint">заявка на доставку · <span id="shopName"></span></span></div>
+  </header>
+
+  <div id="noToken" class="w warn" hidden><span class="tag">Настройка</span>Добавьте токен VK внизу, в «Настройках», — без него приложение не может читать посты.</div>
+
+  <section class="card" aria-labelledby="h-form">
+    <h2 id="h-form">Что отправить</h2>
+    <label class="f" for="target">Получатель
+      <div class="row"><select id="target"></select></div>
+    </label>
+    <label class="f" for="shop">Магазин
+      <select id="shop"></select>
+    </label>
+    <div class="f" role="group" aria-labelledby="l-admin">
+      <span id="l-admin" style="font-size:.9rem;font-weight:500">Администратор доставки</span>
+      <div class="chips" id="admins"></div>
+      <div class="row">
+        <input type="text" id="adminManual" placeholder="или эмодзи вручную" aria-label="Эмодзи администратора вручную" style="flex:1 1 140px">
+        <button type="button" class="link" id="reloadAdmins">Обновить список</button>
+      </div>
+    </div>
+    <label class="f" for="boxes">Коробки
+      <input type="text" id="boxes" inputmode="text" autocomplete="off" placeholder="103 кор, 15 кит, 4 тай">
+      <span class="hint">Номер и страна через запятую. Можно в одной заявке несколько стран.</span>
+    </label>
+    <button type="button" class="primary" id="go">Составить заявку</button>
+    <div id="progress" aria-live="polite"></div>
+  </section>
+
+  <div id="fatal" class="fatal" hidden></div>
+
+  <section class="card" id="result" hidden aria-labelledby="h-res">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="h-res">Заявка (можно править)</h2>
+      <div class="row">
+        <button type="button" id="retry" hidden>Повторить нерешённое</button>
+        <button type="button" id="copy">Копировать</button>
+      </div>
+    </div>
+    <textarea id="out" spellcheck="false" aria-label="Текст заявки"></textarea>
+    <span class="status" id="copyStatus" role="status"></span>
+    <div id="todoWrap" hidden><h2>Дополнить вручную</h2><ul class="list todo" id="todo"></ul></div>
+    <div id="warnWrap" hidden style="display:grid;gap:8px"><h2>Проверить</h2><div id="warns" style="display:grid;gap:8px"></div></div>
+    <div><h2>Источники</h2><ul class="list src" id="sources"></ul></div>
+    <button type="button" class="link" id="diag">Скопировать отчёт для отладки (без токена)</button>
+  </section>
+
+  <details class="card settings" id="settings">
+    <summary>Настройки</summary>
+    <label class="f" for="token">Токен VK
+      <input type="password" id="token" autocomplete="off" placeholder="вставьте токен" spellcheck="false">
+      <span class="hint">Хранится только на этом устройстве. Не попадает в заявку, отчёт и адресную строку.</span>
+    </label>
+    <div class="row">
+      <button type="button" id="saveToken">Сохранить токен</button>
+      <button type="button" id="checkToken">Проверить доступ</button>
+      <button type="button" class="link" id="clearToken">Удалить токен</button>
+    </div>
+    <span class="status" id="tokenStatus" role="status"></span>
+    <label class="f" for="apiHost">Адрес API
+      <select id="apiHost"><option>api.vk.ru</option><option>api.vk.com</option></select>
+    </label>
+    <h2>Получатели</h2>
+    <div id="people" style="display:grid;gap:10px"></div>
+    <button type="button" id="addPerson">Добавить получателя</button>
+  </details>
+</main>
+
+<script>
+/* VK shipping-request builder — shared core (shop-agnostic).
+ * Works in the browser (window.ShipCore) and in Node (module.exports).
+ * Shop-specific formats live in src/shops/*.js and are passed in as `shop`.
+ */
+(function (root) {
+  'use strict';
+
+  // ---------- small helpers ----------
+  const stripVS = s => String(s || '').replace(/[︎️‍]/g, '');
+  const norm = s => stripVS(s).toLowerCase().replace(/ё/g, 'е');
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const uniq = a => [...new Set(a)];
+  const LEAD_DECOR = /^[^\p{L}\p{N}\[@#]+/u;   // leading emoji / bullets / spaces
+
+  function postLink(shop, postId, commentId) {
+    const base = `https://${shop.linkDomain || 'vk.ru'}/wall-${shop.groupId}_${postId}`;
+    return commentId ? `${base}?reply=${commentId}` : base;
+  }
+
+  // ---------- target-user matching ----------
+  // Returns {status:'match'|'namesake'|'name-only'|'conflict'|null, start, end}
+  function findTargetInLine(line, target) {
+    const id = String(target.vkId || '').replace(/^id/, '');
+    const uname = String(target.username || '').replace(/^@/, '').toLowerCase();
+    const names = (target.names || []).map(norm).filter(Boolean);
+    const L = stripVS(line);
+
+    // Bracket mentions [id123|text] / [club..] and plain @handle (@id..) mentions
+    const mentions = [];
+    const reB = /\[(id\d+|[A-Za-z0-9_.]+)\|([^\]]*)\]/g;
+    let m;
+    while ((m = reB.exec(L))) mentions.push({ ref: m[1], text: m[2], start: m.index, end: m.index + m[0].length });
+    const reAt = /(^|[\s(,;])@([A-Za-z0-9_.]+)(?:\s*\(([^)]*)\))?/g;
+    while ((m = reAt.exec(L))) {
+      const s = m.index + m[1].length;
+      if (mentions.some(x => s >= x.start && s < x.end)) continue;
+      mentions.push({ ref: m[2], text: m[3] || '', start: s, end: m.index + m[0].length });
+    }
+    const reUrl = /(?:https?:\/\/)?(?:m\.)?vk\.(?:com|ru)\/([A-Za-z0-9_.]+)/g;
+    while ((m = reUrl.exec(L))) {
+      if (/^(wall|album|topic|club|public|photo)/.test(m[1])) continue;
+      if (mentions.some(x => m.index >= x.start && m.index < x.end)) continue;
+      mentions.push({ ref: m[1], text: '', start: m.index, end: m.index + m[0].length });
+    }
+    mentions.sort((a, b) => a.start - b.start);
+
+    const isTargetRef = ref => {
+      const r = ref.toLowerCase();
+      return (id && (r === 'id' + id)) || (uname && r === uname);
+    };
+    for (const x of mentions) {
+      const refHit = isTargetRef(x.ref);
+      const textHit = uname && x.text.replace(/^@/, '').toLowerCase() === uname;
+      if (refHit || textHit) {
+        // conflicting: [id999|@someone] where @someone is the target username but the id differs
+        if (!refHit && textHit && /^id\d+$/.test(x.ref)) return { status: 'conflict', start: x.start, end: x.end, ref: x.ref };
+        // name text right after the mention (e.g. "] Имя Фамилия")
+        let end = x.end;
+        const after = L.slice(end);
+        const nm = after.match(/^\s*[^\s\-–—(,]+(?:\s+[^\s\-–—(,]+)?/);
+        if (nm && names.some(n => norm(nm[0]).trim() && n.startsWith(norm(nm[0]).trim().split(/\s+/)[0]))) end += nm[0].length;
+        return { status: 'match', start: x.start, end };
+      }
+    }
+    // name present without a target mention
+    const nL = norm(L);
+    for (const n of names) {
+      const i = nL.indexOf(n);
+      if (i >= 0) {
+        // name directly after someone else's mention => a namesake with a different account
+        const before = mentions.filter(x => x.end <= i && i - x.end <= 2);
+        if (before.length) return { status: 'namesake', start: before[0].start, end: i + n.length, ref: before[0].ref };
+        return { status: 'name-only', start: i, end: i + n.length };
+      }
+    }
+    return { status: null };
+  }
+
+  // ---------- payment-list identifier ("Хаым", "№ 3", "предзаказная карта 1") ----------
+  const QTY = /\d+\s*(к|шт|дж|а|пр|ф|фб|сетм|сетко|миниа|компакт|тинкейс)\b/i;
+  function extractIdentifier(line, hit) {
+    const L = stripVS(line);
+    let left = L.slice(0, hit.start).replace(LEAD_DECOR, '').trim();
+    const flags = [];
+    if (left) {
+      let m = left.match(/^(\d+)\s*[.)]?\s*[—–-]?\s*$/);
+      if (m) return { id: m[1], kind: 'number', flags };
+      left = left.replace(/\s*[—–-]\s*$/, '').trim();
+      const fl = left.match(/\s*[—–-]\s*(лотерея|замена|подбор)\s*$/i);
+      if (fl) { flags.push(fl[1].toLowerCase()); left = left.slice(0, fl.index).trim(); }
+      left = left.replace(/\s*[—–-]\s*[\d\s.,]+\s*(руб\S*|₽|р\.?)\s*$/i, '').trim();
+      left = left.replace(/^(\d+)\s*[.)]\s+/, '$1 ').trim();
+      if (left && !/^\d+$/.test(left)) return { id: left, kind: 'name', flags };
+      if (/^\d+$/.test(left)) return { id: left, kind: 'number', flags };
+    }
+    // identifier to the RIGHT: "[id..] Имя - Хаым - 745 рублей"
+    const right = L.slice(hit.end);
+    const r = right.match(/^\s*[—–-]\s*([^\d\s—–-][^—–-]*?)\s*[—–-]\s*\d[\d\s]*(руб|₽)/i);
+    if (r && !QTY.test(r[1]) && r[1].length <= 30) return { id: r[1].trim(), kind: 'name', flags: ['right'] };
+    return null;
+  }
+
+  // ---------- order tokens ----------
+  function ordersInLine(line) {
+    const out = [];
+    const re = /#\s*(колл\s*\d+(?:\.\d+)?|\d+)/gi;
+    let m;
+    while ((m = re.exec(stripVS(line)))) out.push(m[1].replace(/\s+/g, '').toLowerCase());
+    return out;
+  }
+  const orderLabel = o => '#' + o;
+
+  // Payment-post header: "кор #5558-#5560, тай #2414, #2415 ∘ оплата" / "#колл308.3 часть 1 ∘ оплата"
+  function parsePaymentHeader(shop, first) {
+    const h = stripVS(first);
+    const cut = h.search(shop.payment.headerCut);
+    const s = (cut >= 0 ? h.slice(0, cut) : h).toLowerCase();
+    const entries = [];
+    let country = null;
+    const re = new RegExp('(' + shop.countryWordRe + ')|#\\s*(колл\\s*\\d+(?:\\.\\d+)?)|#\\s*(\\d+)(?:\\s*[-–]\\s*#?\\s*(\\d+))?', 'gi');
+    let m;
+    while ((m = re.exec(s))) {
+      if (m[1]) country = shop.countryOf(m[1]);
+      else if (m[2]) entries.push({ kind: 'koll', token: m[2].replace(/\s+/g, '') });
+      else entries.push({ kind: 'num', country, from: +m[3], to: m[4] ? +m[4] : +m[3] });
+    }
+    const part = (s.match(/часть\s*(\d+)/) || [])[1] || null;
+    return { entries, part };
+  }
+  function headerCovers(hdr, order, country) {
+    if (order.startsWith('колл')) {
+      return hdr.entries.some(e => e.kind === 'koll' && (e.token === order || e.token.startsWith(order + '.')));
+    }
+    const n = +order;
+    let anyCountry = false;
+    for (const e of hdr.entries) {
+      if (e.kind !== 'num' || n < e.from || n > e.to) continue;
+      if (e.country === country) return 'exact';
+      if (e.country === null) anyCountry = true;
+    }
+    return anyCountry ? 'nocountry' : false;
+  }
+  function otherCountryCover(hdr, order) {
+    if (order.startsWith('колл')) return null;
+    const n = +order;
+    const e = hdr.entries.find(e => e.kind === 'num' && n >= e.from && n <= e.to && e.country);
+    return e ? e.country : null;
+  }
+
+  // Section headers inside a combined payment post: "— кор #5558", "— #5520", "✧ #2821:"
+  function sectionOrders(shop, line) {
+    const t = stripVS(line).replace(LEAD_DECOR, '').trim().toLowerCase();
+    const re = new RegExp('^(?:(' + shop.countryWordRe + ')\\s*)?(#\\s*(?:колл\\s*)?\\d+(?:\\.\\d+)?(?:\\s*[,+]\\s*#\\s*(?:колл\\s*)?\\d+(?:\\.\\d+)?)*)\\s*(?:часть\\s*\\d+)?\\s*:?\\s*$');
+    const m = t.match(re);
+    if (!m) return null;
+    return { country: m[1] ? shop.countryOf(m[1]) : null, orders: ordersInLine(m[2]) };
+  }
+
+  // Find target entries in a payment text for a given order
+  function targetEntriesForOrder(shop, text, order, country, target) {
+    const lines = stripVS(text).split('\n');
+    const sections = lines.map(l => sectionOrders(shop, l));
+    const sectioned = sections.filter(Boolean).length >= 1 && sections.filter(Boolean).some(s => s.orders.length);
+    const res = { entries: [], ambiguous: [], namesakes: [], sectioned };
+    let cur = null;
+    lines.forEach((l, i) => {
+      if (sections[i]) { cur = sections[i]; return; }
+      const hit = findTargetInLine(l, target);
+      if (!hit.status) return;
+      if (sectioned) {
+        if (!cur) return;
+        const okOrder = cur.orders.includes(order) || (order.startsWith('колл') && cur.orders.some(o => o.startsWith(order + '.')));
+        const okCountry = !cur.country || !country || cur.country === country || order.startsWith('колл');
+        if (!okOrder || !okCountry) return;
+      }
+      if (hit.status === 'match') res.entries.push({ line: l.trim(), ident: extractIdentifier(l, hit) });
+      else if (hit.status === 'name-only') res.ambiguous.push(l.trim());
+      else if (hit.status === 'namesake' || hit.status === 'conflict') res.namesakes.push(l.trim());
+    });
+    return res;
+  }
+
+  // ---------- shipping (box) post ----------
+  function parseShippingHeader(shop, first) {
+    const h = stripVS(first);
+    const m = h.match(shop.shipping.headerRe);
+    if (!m) return null;
+    const em = h.match(/[⌊\[]\s*([^⌋\]]+?)\s*[⌋\]]/);
+    const part = (h.match(/часть\s*(\d+)/i) || [])[1] || null;
+    return { country: shop.countryOf(m[1]), num: +m[2], emoji: em ? stripVS(em[1]).trim() : null, part };
+  }
+  function targetLinesInShipping(text, target) {
+    const out = { entries: [], ambiguous: [], namesakes: [] };
+    for (const l of stripVS(text).split('\n')) {
+      const hit = findTargetInLine(l, target);
+      if (!hit.status) continue;
+      const rec = { line: l.trim(), orders: ordersInLine(l.slice(hit.end)) };
+      if (hit.status === 'match') out.entries.push(rec);
+      else if (hit.status === 'name-only') out.ambiguous.push(rec.line);
+      else out.namesakes.push(rec.line);
+    }
+    return out;
+  }
+
+  // ---------- box input ----------
+  function parseBoxes(shop, input) {
+    const boxes = [], bad = [];
+    for (let tok of String(input || '').split(/[,;\n]+/)) {
+      tok = tok.trim().toLowerCase().replace(/#/g, '');
+      if (!tok) continue;
+      let m = tok.match(new RegExp('^(\\d+)\\s*(' + shop.countryWordRe + ')[а-яa-z.]*$')) ||
+              tok.match(new RegExp('^(' + shop.countryWordRe + ')[а-яa-z.]*\\s*(\\d+)$'));
+      if (!m) { bad.push(tok); continue; }
+      const num = /^\d+$/.test(m[1]) ? +m[1] : +m[2];
+      const word = /^\d+$/.test(m[1]) ? m[2] : m[1];
+      const country = shop.countryOf(word);
+      if (!country) { bad.push(tok); continue; }
+      if (!boxes.some(b => b.country === country && b.num === num)) boxes.push({ country, num });
+    }
+    return { boxes, bad };
+  }
+
+  // ---------- rules / template ----------
+  function boxesHeldInRules(shop, text) {
+    const held = new Set();
+    let cur = null;
+    const reNamed = new RegExp('(\\d+)\\s*(' + shop.countryWordRe + ')[а-я]*\\s*коробк', 'gi');
+    for (const raw of stripVS(text).split('\n')) {
+      const l = raw.toLowerCase();
+      const hm = l.match(new RegExp('^\\s*(' + shop.countryWordRe + ')[а-я]*\\s*:\\s*$'));
+      if (hm) { cur = shop.countryOf(hm[1]); continue; }
+      if (/^\s*\d+\)/.test(l) || /^\s*$/.test(l) && false) cur = cur;
+      let m; let found = false;
+      while ((m = reNamed.exec(l))) { held.add(shop.countryOf(m[2]) + m[1]); found = true; }
+      if (!found && cur) {
+        const reLink = /\[[^\]|]+\|\s*(\d+)\s*\]/g;
+        while ((m = reLink.exec(l))) held.add(cur + m[1]);
+      }
+      if (/^\s*\d+\)\s/.test(l)) cur = null;
+    }
+    return held;
+  }
+
+  function classifyItem(text) {
+    const t = norm(text);
+    if (/номер коробк|коробк/.test(t) && !/разбор|оплат/.test(t)) return 'box';
+    if (/дефект/.test(t)) return 'defects';
+    // "фото ОБВЕДЕННОГО стаффа ... (виден номер разбора)" is a photo request, not an order field
+    if (/^(прикрепите\s+)?(фото|скрин)/.test(t) || /прикрепите\s+(фото|скрин)/.test(t)) return 'photo';
+    if (/упаков|пожелани|топлоадер/.test(t)) return 'packaging';
+    if (/служб\S* доставк|способ\S* доставк|доставк/.test(t)) return 'shipping';
+    if (/ссылк\S* на пост|оплат/.test(t)) return 'payment';
+    if (/номер разбора|разбор/.test(t)) return 'order';
+    if (/(фото|скрин)/.test(t)) return 'photo';
+    if (/обратите внимание|не предоставля|не фотограф|срок/.test(t)) return 'info';
+    return 'unknown';
+  }
+
+  function parseTemplate(text) {
+    const lines = stripVS(text).split('\n');
+    const start = lines.findIndex(l => /шаблон/i.test(l));
+    if (start < 0) return null;
+    const items = [];
+    let i = start + 1;
+    while (i < lines.length && !lines[i].trim()) i++;
+    for (; i < lines.length; i++) {
+      const raw = lines[i];
+      const l = raw.trim();
+      if (!l) {
+        let j = i + 1;
+        while (j < lines.length && !lines[j].trim()) j++;
+        if (j < lines.length && /^\d+[.)]\s*/.test(lines[j].trim()) && items.length) { i = j - 1; continue; }
+        if (items.length) break; else continue;
+      }
+      let m = l.match(/^(\d+)\.\s*(.*)$/);
+      if (m) { items.push({ num: +m[1], text: m[2].trim(), subs: [] }); continue; }
+      m = l.match(/^[-–•]\s*(.+)$/);
+      if (m && items.length) { items[items.length - 1].subs.push(m[1].trim()); continue; }
+      if (/^❗/.test(l) && items.length) { items[items.length - 1].subs.push(l); continue; }
+      if (items.length) break;
+    }
+    if (!items.length) return null;
+    for (const it of items) {
+      it.type = it.text ? classifyItem(it.text) : (it.subs.length ? 'group' : 'unknown');
+      it.subTypes = it.subs.map(s => /^❗/.test(s) ? 'info' : classifyItem(s));
+      if (it.type === 'defects' || it.type === 'info') it.subTypes = it.subTypes.map(() => 'info');
+      it.needsListId = /порядков\S* номер|номер в оплате|ваш номер/i.test(it.text + ' ' + it.subs.join(' '));
+      it.mentionsLottery = /лотере|замен|подбор/i.test(it.text + ' ' + it.subs.join(' '));
+    }
+    return { items, startLine: start };
+  }
+
+  function shippingMethods(itemText) {
+    const t = stripVS(itemText);
+    const p = t.match(/\(([^)]*)\)/);
+    if (!p) return null;
+    let s = p[1].replace(/‼[^‼]*‼/g, '').replace(/❗/g, '');
+    if (s.includes(':')) s = s.slice(s.lastIndexOf(':') + 1);
+    const methods = s.split('/').map(x => x.trim().replace(/[;.,]+$/, '')).filter(x => x && x.length < 25);
+    return methods.length >= 1 ? methods : null;
+  }
+
+  // ---------- VK access ----------
+  function makeThrottled(call, minGapMs) {
+    let last = 0, chain = Promise.resolve();
+    return (method, params) => {
+      const run = async () => {
+        const wait = last + minGapMs - Date.now();
+        if (wait > 0) await new Promise(r => setTimeout(r, wait));
+        last = Date.now();
+        let attempt = 0;
+        for (;;) {
+          try { return await call(method, params); }
+          catch (e) {
+            const code = e && (e.error_code || (e.error && e.error.error_code));
+            if (code === 6 && attempt++ < 3) { await new Promise(r => setTimeout(r, 800 * attempt)); continue; }
+            throw e;
+          }
+        }
+      };
+      const p = chain.then(run, run);
+      chain = p.catch(() => {});
+      return p;
+    };
+  }
+  const errText = e => (e && (e.error_msg || (e.error && e.error.error_msg) || e.message)) || String(e);
+
+  // ---------- pipeline ----------
+  // Errors after which nothing else can work (bad/expired token, captcha, validation required).
+  const FATAL_CODES = new Set([5, 14, 17, 1116]);
+  class FatalVkError extends Error {}
+  async function generate(opts) {
+    try { return await generateInner(opts); }
+    catch (e) {
+      if (e instanceof FatalVkError) return { fatal: e.message, warnings: [] };
+      throw e;
+    }
+  }
+  async function generateInner(opts) {
+    const { shop, target, adminEmoji, boxInput, onProgress = () => {}, cache = {} } = opts;
+    const api = async (m, p) => {
+      try { return await opts.api(m, p); }
+      catch (e) {
+        const code = e && (e.error_code || (e.error && e.error.error_code));
+        if (FATAL_CODES.has(code)) throw new FatalVkError(code === 5 ? 'VK отклонил токен (ошибка авторизации). Обновите токен в настройках.' : 'VK требует подтверждения (капча/валидация): ' + errText(e));
+        throw e;
+      }
+    };
+    if (!target || !(target.vkId || target.username)) return { fatal: 'Не задан получатель (VK ID или username).', warnings: [] };
+    const prog = (msg) => onProgress(msg);
+    const W = [];          // warnings: {level, text, links?}
+    const manual = [];     // manual completion items
+    const sources = [];    // {label, url}
+    const addSrc = (label, url) => { if (!sources.some(s => s.url === url)) sources.push({ label, url }); };
+    const admin = stripVS(adminEmoji || '').trim();
+
+    const { boxes, bad } = parseBoxes(shop, boxInput);
+    bad.forEach(b => W.push({ level: 'warn', text: `Не понял коробку «${b}» — пропущена. Формат: «103 кор, 15 кит, 4 тай».` }));
+    if (!boxes.length) return { fatal: 'Не указано ни одной коробки.', warnings: W };
+
+    // 1) rules topic
+    prog('Ищу обсуждение с правилами доставки…');
+    let topic = null, rulesText = '', template = null, held = null;
+    try {
+      const topics = cache.topics || (cache.topics = (await api('board.getTopics', { group_id: shop.groupId, count: 100 })).items);
+      const cands = topics.filter(t => shop.shippingTopic.include.test(t.title) && stripVS(t.title).includes(admin));
+      const primary = cands.filter(t => !shop.shippingTopic.exclude.test(t.title));
+      const other = cands.filter(t => shop.shippingTopic.exclude.test(t.title));
+      if (primary.length === 1) topic = primary[0];
+      else if (primary.length > 1) {
+        W.push({ level: 'error', text: `Найдено несколько обсуждений доставки для ${admin}. Выбрал первое, проверьте:`, links: primary.map(t => ({ label: t.title, url: `https://${shop.linkDomain}/topic-${shop.groupId}_${t.id}` })) });
+        topic = primary[0];
+      } else {
+        W.push({ level: 'error', text: `Не найдено обсуждение доставки для администратора ${admin}. Заявка будет без шаблона.` });
+      }
+      if (other.length) W.push({ level: 'info', text: `Есть и другие обсуждения с ${admin} (не использованы): ${other.map(t => t.title).join('; ')}` });
+      if (topic) {
+        const tUrl = `https://${shop.linkDomain}/topic-${shop.groupId}_${topic.id}`;
+        addSrc('Правила: ' + topic.title, tUrl);
+        const key = 'rules' + topic.id;
+        const c = cache[key] || (cache[key] = await api('board.getComments', { group_id: shop.groupId, topic_id: topic.id, count: 5, sort: 'asc' }));
+        rulesText = c.items.filter(x => x.from_id < 0).map(x => x.text).join('\n\n');
+        template = parseTemplate(rulesText);
+        held = boxesHeldInRules(shop, rulesText);
+        if (!template) W.push({ level: 'error', text: 'Не удалось найти шаблон заявки в правилах — собрал данные черновиком.', links: [{ label: topic.title, url: tUrl }] });
+      }
+    } catch (e) { if (e instanceof FatalVkError) throw e;
+      W.push({ level: 'error', text: 'Не удалось прочитать обсуждения: ' + errText(e) });
+    }
+
+    // 2) boxes -> target orders
+    const boxRes = [];
+    for (const b of boxes) {
+      const label = `${b.country} ${b.num}`;
+      prog(`Коробка ${label}: ищу оплату доставки…`);
+      const r = { box: b, label, orders: [], posts: [], ok: false };
+      boxRes.push(r);
+      try {
+        const notListed = held && held.size && !held.has(b.country + b.num);
+        const tag = shop.boxTag(b.country, b.num);
+        const s = await api('wall.search', { owner_id: -shop.groupId, query: tag, count: 100 });
+        let posts = s.items.filter(p => p.post_type !== 'reply' && !p.post_id)
+          .map(p => ({ p, h: parseShippingHeader(shop, (p.text || '').split('\n')[0]) }))
+          .filter(x => x.h && x.h.country === b.country && x.h.num === b.num);
+        if (!posts.length) {
+          W.push({ level: 'error', text: `Не найден пост оплаты доставки для коробки ${label} (${tag}).` });
+          r.error = 'not-found';
+          continue;
+        }
+        const emojis = uniq(posts.map(x => x.h.emoji).filter(Boolean));
+        if (admin && emojis.length && !emojis.includes(admin)) {
+          r.wrongAdmin = emojis.join('/');
+          W.push({ level: 'error', text: `Коробка ${label} у администратора ${r.wrongAdmin}, а выбран ${admin}. Коробка не включена в эту заявку — оформите для неё отдельную заявку у ${r.wrongAdmin}.`, links: posts.map(x => ({ label: `${tag}${x.h.part ? ' часть ' + x.h.part : ''}`, url: postLink(shop, x.p.id) })) });
+          continue;
+        } else if (notListed)
+          W.push({ level: emojis.includes(admin) ? 'info' : 'warn', text: `Коробки ${label} нет в списке «на руках у администратора» в правилах ${admin}` + (emojis.includes(admin) ? ' (список, вероятно, не обновлён; по посту оплаты доставки коробка у этого администратора).' : '. Проверьте администратора.') });
+        for (const { p, h } of posts) {
+          addSrc(`Оплата доставки ${label}${h.part ? ' (часть ' + h.part + ')' : ''}`, postLink(shop, p.id));
+          r.posts.push(p.id);
+          const fromPost = targetLinesInShipping(p.text || '', target);
+          let fromComments = { entries: [], ambiguous: [], namesakes: [] };
+          try {
+            const c = await api('wall.getComments', { owner_id: -shop.groupId, post_id: p.id, count: 100, sort: 'asc' });
+            for (const cm of c.items.filter(x => x.from_id === -shop.groupId)) {
+              const t = targetLinesInShipping(cm.text || '', target);
+              fromComments.entries.push(...t.entries); fromComments.ambiguous.push(...t.ambiguous); fromComments.namesakes.push(...t.namesakes);
+            }
+          } catch (e) { if (e instanceof FatalVkError) throw e; W.push({ level: 'info', text: `Комментарии к посту ${label} не прочитаны: ${errText(e)}` }); }
+          const postOrders = uniq(fromPost.entries.flatMap(e => e.orders));
+          const comOrders = uniq(fromComments.entries.flatMap(e => e.orders));
+          let use = postOrders.length ? postOrders : comOrders;
+          if (postOrders.length && comOrders.length && postOrders.join() !== comOrders.join()) {
+            const extra = comOrders.filter(o => !postOrders.includes(o));
+            W.push({ level: 'warn', text: `${label}: в посте ${postOrders.map(orderLabel).join(', ')}, а в комментарии-дубле ${comOrders.map(orderLabel).join(', ')}. Взял данные из поста${extra.length ? ' + ' + extra.map(orderLabel).join(', ') : ''}.`, links: [{ label: 'пост', url: postLink(shop, p.id) }] });
+            use = uniq([...postOrders, ...extra]);
+          }
+          for (const o of use) if (!r.orders.includes(o)) r.orders.push(o);
+          const amb = uniq([...fromPost.ambiguous, ...fromComments.ambiguous]);
+          if (amb.length) W.push({ level: 'warn', text: `${label}: найдено имя без ссылки на профиль — не принято автоматически:\n${amb.join('\n')}`, links: [{ label: 'пост', url: postLink(shop, p.id) }] });
+          const ns = uniq([...fromPost.namesakes, ...fromComments.namesakes]);
+          if (ns.length) W.push({ level: 'info', text: `${label}: строки с тем же именем, но другим профилем (пропущены):\n${ns.join('\n')}` });
+          if (fromPost.entries.some(e => !e.orders.length)) W.push({ level: 'warn', text: `${label}: строка участника без номеров разборов:\n${fromPost.entries.filter(e => !e.orders.length).map(e => e.line).join('\n')}` });
+        }
+        if (!r.orders.length) {
+          W.push({ level: 'error', text: `В оплате доставки ${label} не найдено записей пользователя.`, links: r.posts.map(id => ({ label: 'пост', url: postLink(shop, id) })) });
+          r.error = 'no-entries';
+        } else r.ok = true;
+      } catch (e) { if (e instanceof FatalVkError) throw e;
+        r.error = errText(e);
+        W.push({ level: 'error', text: `Коробка ${label}: ошибка запроса — ${errText(e)}. Можно повторить.` });
+      }
+    }
+
+    // 3) orders -> merchandise payment posts
+    for (const r of boxRes) {
+      for (const order of r.orders) {
+        if (r.found && r.found[order]) continue;
+        r.found = r.found || {};
+        prog(`Ищу оплату разбора #${order} (${r.label})…`);
+        try {
+          r.found[order] = await findPayment(shop, api, target, order, r.box.country, W, cache);
+          for (const f of r.found[order].posts) addSrc(`Оплата #${order}`, postLink(shop, f.id));
+        } catch (e) { if (e instanceof FatalVkError) throw e;
+          r.found[order] = { posts: [], error: errText(e) };
+          W.push({ level: 'error', text: `#${order}: ошибка запроса — ${errText(e)}. Можно повторить.` });
+        }
+      }
+    }
+
+    // 4) format
+    prog('Собираю заявку…');
+    const text = formatRequest({ shop, template, boxRes, W, manual, rulesHasTemplate: !!template });
+    return { text, warnings: W, manual, sources, boxRes, topic, template };
+  }
+
+  async function findPayment(shop, api, target, order, country, W, cache) {
+    const isKoll = order.startsWith('колл');
+    const seen = new Map();
+    const others = new Map();   // non-payment posts that mention the order (e.g. "свободные позиции")
+    const queries = ['#' + order];
+    const collect = async (q, keepOthers) => {
+      const ck = 'ws:' + q;
+      const s = cache[ck] || (cache[ck] = await api('wall.search', { owner_id: -shop.groupId, query: q, count: 100 }));
+      for (const p of s.items) {
+        if (p.post_type === 'reply' || p.post_id) continue;
+        const first = stripVS((p.text || '').split('\n')[0]);
+        if (shop.shipping.headerRe.test(first)) continue;
+        if (!shop.payment.headerRe.test(first)) { if (keepOthers && !others.has(p.id)) others.set(p.id, p); continue; }
+        if (!seen.has(p.id)) seen.set(p.id, { p, h: parsePaymentHeader(shop, first) });
+      }
+    };
+    await collect(queries[0], true);
+    let cover = [...seen.values()].filter(x => headerCovers(x.h, order, country));
+    if (!cover.length && !isKoll) {
+      // range posts whose start number is lower: "кор #5520-#5524"
+      for (let d = 1; d <= 6 && !cover.length; d++) {
+        await collect('#' + (+order - d));
+        cover = [...seen.values()].filter(x => headerCovers(x.h, order, country));
+      }
+    }
+    const result = { posts: [], idents: [], flags: [] };
+    const wrongCountry = [...seen.values()].filter(x => !headerCovers(x.h, order, country) && otherCountryCover(x.h, order));
+    if (!cover.length) {
+      result.missing = true;
+      const links = wrongCountry.map(x => ({ label: 'другая страна: ' + (x.p.text || '').split('\n')[0].slice(0, 60), url: postLink(shop, x.p.id) }));
+      for (const p of [...others.values()].slice(0, 4)) links.push({ label: 'упоминание: ' + (p.text || '').split('\n')[0].slice(0, 60), url: postLink(shop, p.id) });
+      W.push({ level: 'error', text: `Не найден пост оплаты для ${country} #${order}.` + (links.length ? ' Посты, где встречается этот номер (не приняты автоматически):' : ''), links });
+      return result;
+    }
+    const withTarget = [], without = [];
+    for (const x of cover) {
+      let full = x.p.text || '';
+      if (!full || full.length < 30) {
+        const g = await api('wall.getById', { posts: `-${shop.groupId}_${x.p.id}` });
+        full = ((g.items || g)[0] || {}).text || full;
+      }
+      let te = targetEntriesForOrder(shop, full, order, country, target);
+      if (!te.entries.length) {
+        try {
+          const c = await api('wall.getComments', { owner_id: -shop.groupId, post_id: x.p.id, count: 100, sort: 'asc' });
+          const ct = c.items.filter(m => m.from_id === -shop.groupId).map(m => m.text || '').join('\n');
+          const te2 = targetEntriesForOrder(shop, ct, order, country, target);
+          if (te2.entries.length) te = te2; else { te.ambiguous.push(...te2.ambiguous); te.namesakes.push(...te2.namesakes); }
+        } catch (e) { if (e instanceof FatalVkError) throw e; /* comments optional */ }
+      }
+      (te.entries.length ? withTarget : without).push({ x, te });
+    }
+    const picked = withTarget.length ? withTarget : [];
+    for (const { x, te } of picked) {
+      result.posts.push({ id: x.p.id, header: (x.p.text || '').split('\n')[0], countryMatch: headerCovers(x.h, order, country) });
+      for (const e of te.entries) {
+        if (e.ident) {
+          if (!result.idents.some(i => i.id === e.ident.id)) result.idents.push(e.ident);
+          for (const f of e.ident.flags) if (f !== 'right' && !result.flags.includes(f)) result.flags.push(f);
+          if (e.ident.flags.includes('right')) W.push({ level: 'info', text: `#${order}: идентификатор «${e.ident.id}» взят справа от имени — проверьте.`, links: [{ label: 'оплата', url: postLink(shop, x.p.id) }] });
+        } else {
+          result.noIdent = true;
+        }
+      }
+      if (headerCovers(x.h, order, country) === 'nocountry') W.push({ level: 'info', text: `#${order}: в заголовке оплаты не указана страна — проверьте ссылку.`, links: [{ label: 'оплата', url: postLink(shop, x.p.id) }] });
+    }
+    if (!picked.length) {
+      result.missing = true;
+      const amb = without.flatMap(w => w.te.ambiguous);
+      W.push({ level: 'error', text: `#${order}: пост оплаты найден, но записи пользователя в нём нет${amb.length ? ' (есть совпадение только по имени: ' + amb.join(' | ') + ')' : ''}. Возможно, позицию переписали на получателя или она получена через замену/лотерею — по правилам (пункт 7) нужен скриншот; ссылку добавьте вручную.`, links: without.map(w => ({ label: (w.x.p.text || '').split('\n')[0].slice(0, 60), url: postLink(shop, w.x.p.id) })) });
+    }
+    return result;
+  }
+
+  function identText(f) {
+    if (!f || !f.idents.length) return '';
+    const nums = f.idents.filter(i => i.kind === 'number').map(i => i.id);
+    const names = f.idents.filter(i => i.kind === 'name').map(i => i.id);
+    const parts = [];
+    if (nums.length) parts.push((nums.length > 1 ? 'номера ' : 'номер ') + nums.join(', '));
+    if (names.length) parts.push(names.join(', '));
+    return parts.join('; ');
+  }
+
+  function orderLines(shop, r, needsListId, manual) {
+    const out = [];
+    for (const o of r.orders) {
+      const f = r.found && r.found[o];
+      let line = `#${o}`;
+      if (!f || f.missing || !f.posts.length) {
+        line += ` — [добавить ссылку на оплату #${o}]`;
+        if (needsListId) line += ` — [номер в оплате]`;
+      } else {
+        line += ' — ' + f.posts.map(p => postLink(shop, p.id)).join(' , ');
+        if (needsListId) {
+          const it = identText(f);
+          line += ' — ' + (it || '[номер в оплате]');
+          if (!it) manual.push(`Укажите ваш номер в оплате #${o}.`);
+        }
+        if (f.flags && f.flags.length) manual.push(`#${o}: позиция получена через ${f.flags.join('/')} — по правилам может понадобиться скриншот (пункт 7).`);
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  function formatRequest({ shop, template, boxRes: allBoxes, W, manual }) {
+    for (const r of allBoxes.filter(r => r.wrongAdmin)) manual.push(`Коробка ${r.label} у администратора ${r.wrongAdmin} — нужна отдельная заявка.`);
+    const boxRes = allBoxes.filter(r => !r.wrongAdmin);
+    if (!boxRes.length) return '[нет коробок этого администратора — заявка не составлена]';
+    const boxList = boxRes.map(r => shop.boxLabel(r.box)).join(', ');
+    for (const r of boxRes) for (const o of r.orders) {
+      const f = r.found && r.found[o];
+      if (!f || f.missing) manual.push(`Добавьте ссылку на оплату #${o} (${r.label}).`);
+    }
+    for (const r of boxRes.filter(r => !r.orders.length)) manual.push(`Коробка ${r.label}: проверьте вручную (не найдено записей).`);
+
+    const ordersBlock = (needsListId) => {
+      const lines = [];
+      const multi = boxRes.length > 1;
+      for (const r of boxRes) {
+        if (multi) lines.push(`${shop.boxLabel(r.box)}:`);
+        if (!r.orders.length) { lines.push(`[проверить вручную: записи в ${r.label} не найдены]`); continue; }
+        lines.push(...orderLines(shop, r, needsListId, manual));
+      }
+      return lines;
+    };
+
+    if (!template) {
+      const lines = ['[черновик — шаблон не найден]', `коробки: ${boxList}`, ...ordersBlock(true), 'фото дефектов: нет'];
+      manual.push('Оформите заявку по шаблону администратора вручную.');
+      return lines.join('\n');
+    }
+    const out = [];
+    let ordersDone = false;
+    for (const it of template.items) {
+      const body = [];
+      const allTypes = [it.type, ...it.subTypes];
+      const hasOrderish = allTypes.some(t => t === 'order' || t === 'payment');
+      const hasPhoto = allTypes.includes('photo') && it.type !== 'defects';
+      if (it.type === 'box') body.push(boxList);
+      else if (hasOrderish && !ordersDone) { body.push(...ordersBlock(it.needsListId)); ordersDone = true; }
+      else if (it.type === 'defects') body.push('нет');
+      else if (it.type === 'packaging') body.push('нет');
+      else if (it.type === 'shipping') {
+        const m = shippingMethods(it.text);
+        body.push(m ? m.join('/') : 'способ доставки');
+        manual.push('Выберите службу доставки' + (m ? ` (${m.join('/')})` : '') + '.');
+      } else if (it.type === 'photo') { body.push('+'); }
+      else if (it.type === 'info') { /* not a question */ }
+      else if (!hasOrderish) {
+        body.push(`[заполнить: ${it.text || it.subs.join('; ')}]`);
+        W.push({ level: 'warn', text: `Пункт ${it.num} шаблона не распознан: «${it.text || it.subs.join('; ')}».` });
+      }
+      if (hasPhoto && it.type !== 'photo') { body.push('+'); }
+      if (hasPhoto) manual.push(`Прикрепите фото/скриншоты к заявке (пункт ${it.num} шаблона).`);
+      if (it.type === 'info' && !body.length) continue;
+      if (body.length === 1 && !/\n/.test(body[0]) && !hasOrderish) out.push(`${it.num}. ${body[0]}`);
+      else { out.push(`${it.num}.`); out.push(...body); }
+    }
+    return out.join('\n');
+  }
+
+  const api = {
+    stripVS, norm, findTargetInLine, extractIdentifier, ordersInLine, parsePaymentHeader, headerCovers,
+    sectionOrders, targetEntriesForOrder, parseShippingHeader, targetLinesInShipping, parseBoxes,
+    boxesHeldInRules, parseTemplate, classifyItem, shippingMethods, makeThrottled, generate, formatRequest, postLink
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.ShipCore = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Shop config: "ck ♡ candle х kranya" (VK club217975753).
+ * Everything specific to this shop's post formats lives here.
+ * To add a shop: copy this file, adjust ids/regexes using real posts, register it in SHOPS.
+ */
+(function (root) {
+  'use strict';
+  const COUNTRY_ALIASES = {
+    'кор': ['кор', 'корея', 'корейская', 'корейск', 'kor', 'к'],
+    'кит': ['кит', 'китай', 'китайская', 'китайск', 'chn'],
+    'тай': ['тай', 'тайская', 'тайск', 'таиланд', 'thai'],
+    'яп': ['яп', 'японская', 'японск', 'япония'],
+    'фил': ['фил', 'филиппинская', 'филиппинск'],
+  };
+  const words = Object.values(COUNTRY_ALIASES).flat().sort((a, b) => b.length - a.length);
+  const shop = {
+    key: 'ck217975753',
+    name: 'ck ♡ candle х kranya',
+    groupId: 217975753,
+    linkDomain: 'vk.ru',
+    // longest-first alternation; single-letter "к" only matches as a whole token in box input
+    countryWordRe: words.filter(w => w.length > 1).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+    countryOf(word) {
+      const w = String(word || '').toLowerCase();
+      for (const [code, al] of Object.entries(COUNTRY_ALIASES)) if (al.some(a => w === a || (a.length > 2 && w.startsWith(a)))) return code;
+      return null;
+    },
+    boxTag: (country, num) => `#${country}${num}`,
+    boxLabel: (b) => `${b.country} ${b.num}`,
+    shippingTopic: {
+      include: /доставк/i,
+      // joint-delivery and pickup/distribution/consolidation topics are not onward-shipping request topics
+      exclude: /раздач|консолидац|самовывоз|совместн|встреч/i,
+    },
+    shipping: {
+      // "⋰ #оплатадоставки_ck — #кор116 ∘ ⌊🐱⌋"  /  "... #кит16 ∘ ⌊💄⌋ ∘ ЧАСТЬ 1"  /  "... #кор112 ∘ [🥀]"
+      headerRe: /#оплатадоставки_ck\s*[—–-]\s*#\s*(кор|кит|тай|яп|фил)\s*(\d+)/i,
+    },
+    payment: {
+      // "⋰ кор #5558-#5560, тай #2414 ∘ оплата ∘ ⌊💫⌋"  /  "⋰ #колл308.4 ∘ оплата ∘ ⌊🌙⌋"
+      headerRe: /∘\s*оплата\s*(∘|$)/i,
+      headerCut: /∘\s*оплата/i,
+    },
+  };
+  const SHOPS = (root.SHIP_SHOPS = root.SHIP_SHOPS || {});
+  SHOPS[shop.key] = shop;
+  if (typeof module !== 'undefined' && module.exports) module.exports = shop;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const C = window.ShipCore, SHOPS = window.SHIP_SHOPS;
+  const $ = id => document.getElementById(id);
+  const KEY = 'vkship.settings.v1', TKEY = 'vkship.token.v1';
+
+  // ---------- storage (never throws) ----------
+  const ls = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  let S;
+  try { S = JSON.parse(ls.get(KEY) || 'null'); } catch (e) { S = null; }
+  S = Object.assign({ targets: [], targetIdx: 0, shopKey: Object.keys(SHOPS)[0], admin: '', boxes: '', apiHost: 'api.vk.ru', adminCache: {} }, S || {});
+  const save = () => ls.set(KEY, JSON.stringify(S));
+  let token = ls.get(TKEY) || '';
+
+  // Remove anything token-like from text we show or export.
+  const scrub = s => String(s == null ? '' : s).replace(/access_token=[^&\s"']+/gi, 'access_token=•••').replace(token ? new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g') : /$^/, '•••');
+
+  // ---------- VK transport: JSONP (VK API does not allow cross-origin fetch) ----------
+  function vkCall(method, params) {
+    return new Promise((resolve, reject) => {
+      if (!token) return reject({ error_code: 5, error_msg: 'Нет токена' });
+      const cb = 'vkcb_' + Math.random().toString(36).slice(2);
+      const q = new URLSearchParams(Object.assign({}, params, { v: '5.199', callback: cb }));
+      q.set('access_token', token);
+      const s = document.createElement('script');
+      s.referrerPolicy = 'no-referrer';
+      const done = () => { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } s.remove(); };
+      const timer = setTimeout(() => { done(); reject({ error_msg: 'VK не ответил за 20 секунд' }); }, 20000);
+      window[cb] = d => { done(); if (d && d.error) reject({ error_code: d.error.error_code, error_msg: d.error.error_msg }); else resolve(d.response); };
+      s.onerror = () => { done(); reject({ error_msg: 'Нет связи с ' + S.apiHost + ' (сеть или блокировка). Попробуйте другой адрес API в настройках.' }); };
+      s.src = 'https://' + S.apiHost + '/method/' + method + '?' + q.toString();
+      document.head.appendChild(s);
+    });
+  }
+  // Throttle (VK allows ~3 requests/s for user tokens) and keep successful answers for retries.
+  const throttled = C.makeThrottled(vkCall, 360);
+  const memo = new Map();
+  const MEMO_TTL = 10 * 60 * 1000;
+  async function api(method, params) {
+    const k = method + ' ' + JSON.stringify(params);
+    const hit = memo.get(k);
+    if (hit && Date.now() - hit.t < MEMO_TTL) return hit.v;
+    const v = await throttled(method, params);
+    memo.set(k, { t: Date.now(), v });
+    return v;
+  }
+
+  // ---------- rendering ----------
+  const shop = () => SHOPS[S.shopKey] || SHOPS[Object.keys(SHOPS)[0]];
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); }
+    for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : String(c));
+    return e;
+  }
+  function renderTargets() {
+    const sel = $('target'); sel.textContent = '';
+    if (!S.targets.length) sel.append(el('option', { value: '' }, '— добавьте получателя в «Настройках» —'));
+    S.targets.forEach((t, i) => sel.append(el('option', { value: i }, t.label || (t.names || [])[0] || ('id' + t.vkId))));
+    if (S.targetIdx >= S.targets.length) S.targetIdx = 0;
+    sel.value = S.targetIdx;
+    const box = $('people'); box.textContent = '';
+    S.targets.forEach((t, i) => {
+      const id = 'p' + i;
+      const row = el('div', { class: 'person' },
+        el('label', { class: 'f', for: id + 'l' }, 'Подпись', el('input', { type: 'text', id: id + 'l', value: t.label || '' })),
+        el('label', { class: 'f', for: id + 'i' }, 'VK ID (цифры)', el('input', { type: 'text', id: id + 'i', value: t.vkId || '', inputmode: 'numeric' })),
+        el('label', { class: 'f', for: id + 'u' }, 'Короткое имя (без @)', el('input', { type: 'text', id: id + 'u', value: t.username || '' })),
+        el('label', { class: 'f', for: id + 'n' }, 'Имя в списках (можно несколько через запятую)', el('input', { type: 'text', id: id + 'n', value: (t.names || []).join(', ') })),
+        el('div', { class: 'row' },
+          el('button', { type: 'button', onclick: () => {
+            t.label = $(id + 'l').value.trim(); t.vkId = $(id + 'i').value.replace(/\D/g, ''); t.username = $(id + 'u').value.trim().replace(/^@/, '');
+            t.names = $(id + 'n').value.split(',').map(s => s.trim()).filter(Boolean); save(); renderTargets(); } }, 'Сохранить'),
+          el('button', { type: 'button', class: 'link', onclick: () => { S.targets.splice(i, 1); save(); renderTargets(); } }, 'Удалить')));
+      box.append(row);
+    });
+  }
+  function renderShops() {
+    const sel = $('shop'); sel.textContent = '';
+    for (const [k, s] of Object.entries(SHOPS)) sel.append(el('option', { value: k }, s.name));
+    sel.value = S.shopKey; $('shopName').textContent = shop().name;
+  }
+  function renderAdmins() {
+    const list = (S.adminCache[S.shopKey] || {}).list || [];
+    const box = $('admins'); box.textContent = '';
+    if (!list.length) box.append(el('span', { class: 'hint' }, token ? 'Нажмите «Обновить список».' : 'Список появится после добавления токена.'));
+    for (const a of list) box.append(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(a.emoji === S.admin), title: a.title, onclick: () => { S.admin = a.emoji; $('adminManual').value = ''; save(); renderAdmins(); } }, a.emoji));
+    if (S.admin && !list.some(a => a.emoji === S.admin)) $('adminManual').value = S.admin;
+  }
+  async function loadAdmins() {
+    const st = $('progress'); st.textContent = 'Загружаю список администраторов…';
+    try {
+      const sh = shop();
+      const r = await api('board.getTopics', { group_id: sh.groupId, count: 100 });
+      const list = [];
+      for (const t of r.items) {
+        if (!sh.shippingTopic.include.test(t.title) || sh.shippingTopic.exclude.test(t.title)) continue;
+        const em = C.stripVS(t.title.replace(/^[★☆\s]+/, '').replace(/^[^\s]*доставк\S*/i, '')).trim();
+        if (em && !list.some(x => x.emoji === em)) list.push({ emoji: em, title: t.title });
+      }
+      S.adminCache[S.shopKey] = { t: Date.now(), list }; save(); renderAdmins();
+      st.textContent = list.length ? '' : 'Обсуждения доставки не найдены.';
+    } catch (e) { st.textContent = 'Не удалось загрузить список: ' + scrub(e.error_msg || e.message || e); }
+  }
+
+  function renderResult(r) {
+    $('result').hidden = false;
+    $('out').value = r.text || '';
+    const todo = $('todo'); todo.textContent = '';
+    [...new Set(r.manual || [])].forEach(m => todo.append(el('li', {}, m)));
+    $('todoWrap').hidden = !todo.children.length;
+    const W = $('warns'); W.textContent = '';
+    const order = { error: 0, warn: 1, info: 2 }, names = { error: 'Ошибка', warn: 'Внимание', info: 'Заметка' };
+    [...(r.warnings || [])].sort((a, b) => order[a.level] - order[b.level]).forEach(w => {
+      const links = (w.links || []).length ? el('div', { class: 'links' }, w.links.map(l => el('a', { href: l.url, target: '_blank', rel: 'noopener noreferrer' }, l.label || l.url))) : null;
+      W.append(el('div', { class: 'w ' + w.level }, el('span', { class: 'tag' }, names[w.level]), scrub(w.text), links));
+    });
+    $('warnWrap').hidden = !W.children.length;
+    const src = $('sources'); src.textContent = '';
+    (r.sources || []).forEach(s => src.append(el('li', {}, el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, s.label))));
+    const unresolved = (r.boxRes || []).some(b => b.error || Object.values(b.found || {}).some(f => f.error || f.missing));
+    $('retry').hidden = !unresolved;
+  }
+
+  let last = null, running = false;
+  async function run() {
+    if (running) return;
+    const admin = ($('adminManual').value.trim() || S.admin || '').trim();
+    $('fatal').hidden = true;
+    if (!token) { $('fatal').hidden = false; $('fatal').textContent = 'Нет токена VK. Откройте «Настройки» внизу страницы.'; $('settings').open = true; return; }
+    const tgt = S.targets[S.targetIdx];
+    if (!tgt || !(tgt.vkId || tgt.username)) { $('fatal').hidden = false; $('fatal').textContent = 'Добавьте получателя (VK ID или короткое имя) в «Настройках».'; $('settings').open = true; return; }
+    if (!admin) { $('fatal').hidden = false; $('fatal').textContent = 'Выберите администратора доставки.'; return; }
+    const boxInput = $('boxes').value;
+    S.boxes = boxInput; S.admin = admin; save();
+    running = true; $('go').disabled = true; $('retry').disabled = true;
+    const prog = $('progress'); prog.textContent = '';
+    const log = m => { const prev = prog.querySelector('.now'); if (prev) prev.className = ''; prog.append(el('div', { class: 'now' }, m)); prog.scrollTop = prog.scrollHeight; };
+    try {
+      const r = await C.generate({ shop: shop(), target: S.targets[S.targetIdx], adminEmoji: admin, boxInput, api, onProgress: log });
+      if (r.fatal) { $('fatal').hidden = false; $('fatal').textContent = scrub(r.fatal); if (r.warnings && r.warnings.length) renderResult({ text: '', warnings: r.warnings }); }
+      else { last = { r, admin, boxInput, at: new Date() }; renderResult(r); log('Готово.'); }
+    } catch (e) {
+      $('fatal').hidden = false; $('fatal').textContent = 'Непредвиденная ошибка: ' + scrub(e && (e.error_msg || e.message) || e);
+    } finally { running = false; $('go').disabled = false; $('retry').disabled = false; }
+  }
+
+  async function copyText(text, statusEl, okMsg) {
+    try { await navigator.clipboard.writeText(text); statusEl.textContent = okMsg; statusEl.className = 'status ok'; }
+    catch (e) {
+      const ta = $('out'); ta.focus(); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (_) {}
+      statusEl.textContent = ok ? okMsg : 'Не получилось скопировать автоматически — текст выделен, скопируйте вручную.'; statusEl.className = 'status';
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+  }
+
+  // ---------- wiring ----------
+  $('target').addEventListener('change', e => { S.targetIdx = +e.target.value; save(); });
+  $('shop').addEventListener('change', e => { S.shopKey = e.target.value; S.admin = ''; save(); renderShops(); renderAdmins(); });
+  $('adminManual').addEventListener('input', () => { if ($('adminManual').value.trim()) { S.admin = ''; renderAdmins(); } });
+  $('reloadAdmins').addEventListener('click', loadAdmins);
+  $('boxes').value = S.boxes || '';
+  $('boxes').addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  $('go').addEventListener('click', run);
+  $('retry').addEventListener('click', () => { if (last) { $('boxes').value = last.boxInput; $('adminManual').value = S.admin === last.admin ? '' : last.admin; run(); } });
+  $('copy').addEventListener('click', () => copyText($('out').value, $('copyStatus'), 'Скопировано.'));
+  $('diag').addEventListener('click', () => {
+    if (!last) return;
+    const r = last.r;
+    const rep = ['Отчёт ' + last.at.toISOString(), 'Магазин: ' + shop().name, 'Администратор: ' + last.admin, 'Коробки: ' + last.boxInput,
+      'Получатель: ' + JSON.stringify(Object.assign({}, S.targets[S.targetIdx])),
+      '', '--- Заявка ---', $('out').value, '', '--- Предупреждения ---',
+      ...(r.warnings || []).map(w => `[${w.level}] ${w.text}${w.links ? ' ' + w.links.map(l => l.url).join(' ') : ''}`),
+      '', '--- Источники ---', ...(r.sources || []).map(s => s.label + ': ' + s.url),
+      '', '--- Разбор по коробкам ---', ...(r.boxRes || []).map(b => `${b.label}: ${b.orders.map(o => '#' + o + '→' + ((b.found && b.found[o] && b.found[o].posts.map(p => p.id).join('/')) || '—')).join(', ')}${b.error ? ' (ошибка: ' + b.error + ')' : ''}`)].join('\n');
+    copyText(scrub(rep), $('copyStatus'), 'Отчёт скопирован.');
+  });
+  $('token').value = '';
+  $('saveToken').addEventListener('click', () => {
+    let v = $('token').value.trim();
+    const m = v.match(/access_token=([^&\s]+)/); if (m) v = m[1];   // accept a pasted OAuth redirect URL too
+    if (!v) return;
+    token = v; ls.set(TKEY, token); $('token').value = ''; memo.clear();
+    $('tokenStatus').textContent = 'Токен сохранён.'; $('tokenStatus').className = 'status ok';
+    $('noToken').hidden = true; loadAdmins();
+  });
+  $('clearToken').addEventListener('click', () => { token = ''; ls.del(TKEY); memo.clear(); $('tokenStatus').textContent = 'Токен удалён.'; $('noToken').hidden = false; });
+  $('checkToken').addEventListener('click', async () => {
+    const st = $('tokenStatus'); st.className = 'status'; st.textContent = 'Проверяю…';
+    try {
+      const r = await vkCall('wall.get', { owner_id: -shop().groupId, count: 1 });
+      st.textContent = `Доступ есть: на стене ${r.count} постов.`; st.className = 'status ok';
+    } catch (e) { st.textContent = 'Нет доступа: ' + scrub(e.error_msg || e.message || e); }
+  });
+  $('apiHost').value = S.apiHost;
+  $('apiHost').addEventListener('change', e => { S.apiHost = e.target.value; save(); });
+  $('addPerson').addEventListener('click', () => { S.targets.push({ label: 'Новый получатель', vkId: '', username: '', names: [] }); save(); renderTargets(); });
+
+  renderTargets(); renderShops(); renderAdmins();
+  $('noToken').hidden = !!token;
+  if (!token || !S.targets.length) $('settings').open = true;
+  else if (!((S.adminCache[S.shopKey] || {}).list || []).length) loadAdmins();
+})();
+
+</script>
+</body>
+</html>
