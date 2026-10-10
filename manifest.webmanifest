@@ -1,0 +1,23 @@
+{
+ "name": "K-pipping",
+ "short_name": "K-pipping",
+ "description": "Заявки на доставку из VK-шопов",
+ "display": "standalone",
+ "background_color": "#f6f3f6",
+ "theme_color": "#8a3f6b",
+ "start_url": "./",
+ "scope": "./",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}
