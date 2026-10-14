@@ -76,16 +76,20 @@ details.settings[open] > summary::after { content: "▴"; }
 .person { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
 .status { font-size: .85rem; } .ok { color: #2e7d32; } :root[data-theme="dark"] .ok { color: #81c784; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ok { color: #81c784; } }
+progress#phBar { width: 100%; height: 8px; accent-color: var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 .ph { position: relative; display: grid; gap: 4px; font-size: .78rem; min-width: 0; }
 .ph img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; border: 2px solid transparent; background: var(--line); }
 .ph input { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; accent-color: var(--accent); }
 .ph input:checked + a img { border-color: var(--accent); }
+.ph .phRetry { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 6px 10px; font-size: .8rem; }
+.ph .phRetry[hidden] { display: none; }
 .ph .lbl { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .ph .lbl.unsure { color: var(--warn); }
 .chipline { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill { font-size: .8rem; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); font-variant-numeric: tabular-nums; }
 .pill.miss { background: var(--err-soft); }
+.pill.maybe { background: var(--warn-soft); }
 details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted); }
 .brand { display: flex; align-items: center; gap: 10px; }
 .logo { width: 40px; height: 40px; border-radius: 50%; flex: none; }
@@ -150,11 +154,14 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     </div>
     <p class="hint" id="phIntro" style="margin:0">Найду в альбомах коробок фото с номерами ваших разборов. Номера читаются прямо на телефоне; в первый раз загрузится модуль распознавания (несколько МБ).</p>
     <button type="button" class="primary" id="phGo">Найти мои фото</button>
-    <div id="phProgress" class="hint" aria-live="polite"></div>
+    <div id="phAwake" class="w info" hidden><span class="tag">Важно</span>Можно переключаться на другие приложения, но не блокируйте экран — иначе поиск встанет на паузу. Пока идёт поиск, экран сам не погаснет.</div>
+    <progress id="phBar" hidden value="0" max="1" aria-label="Прогресс поиска фото"></progress>
+    <div id="phProgress" class="hint" aria-live="polite" style="font-variant-numeric: tabular-nums"></div>
     <div id="phResults" style="display:grid;gap:16px"></div>
     <div id="phSave" class="row" hidden>
       <button type="button" class="primary" id="phDownload" style="flex:1 1 200px">Скачать выбранные</button>
       <button type="button" id="phShare" hidden>Поделиться…</button>
+      <button type="button" id="phReload">↻ Обновить фото</button>
     </div>
     <span class="status" id="phStatus" role="status"></span>
   </section>
@@ -431,6 +438,9 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     // "фото ОБВЕДЕННОГО стаффа ... (виден номер разбора)" is a photo request, not an order field
     if (/^(прикрепите\s+)?(фото|скрин)/.test(t) || /прикрепите\s+(фото|скрин)/.test(t)) return 'photo';
     if (/упаков|пожелани|топлоадер/.test(t)) return 'packaging';
+    if (/ссылк\S* на подбор/.test(t)) return 'podbor';
+    if (/количеств/.test(t)) return 'quantity';                       // "прописывайте точное количество карт" — filled by the user
+    if (/скрин\S* (вашей )?заявк|адрес\S* в лс|в лс .*адрес/.test(t)) return 'confirm';   // "скрин заявки и адрес в лс группы" — an action, answered "+"
     if (/служб\S* доставк|способ\S* доставк|доставк/.test(t)) return 'shipping';
     if (/ссылк\S* на пост|оплат/.test(t)) return 'payment';
     if (/номер разбора|разбор/.test(t)) return 'order';
@@ -439,6 +449,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     return 'unknown';
   }
 
+  const ITEM_RE = /^(?:важно\s+)?(\d+(?:\.\d+)?)(?:\.|\)|\s)\s*(\S.*)?$/i;
   function parseTemplate(text) {
     const lines = stripVS(text).split('\n');
     const start = lines.findIndex(l => /шаблон/i.test(l));
@@ -452,20 +463,24 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
       if (!l) {
         let j = i + 1;
         while (j < lines.length && !lines[j].trim()) j++;
-        if (j < lines.length && /^\d+[.)]\s*/.test(lines[j].trim()) && items.length) { i = j - 1; continue; }
+        if (j < lines.length && ITEM_RE.test(lines[j].trim()) && items.length) { i = j - 1; continue; }
         if (items.length) break; else continue;
       }
-      let m = l.match(/^(\d+)\.\s*(.*)$/);
-      if (m) { items.push({ num: +m[1], text: m[2].trim(), subs: [] }); continue; }
+      // "1.номер коробки", "3.1 ссылка на подбор", "ВАЖНО 8. прописывайте…"
+      let m = l.match(ITEM_RE);
+      if (m && (!items.length || m[1] !== String(items[items.length - 1].num) || /\./.test(m[1]))) { items.push({ num: m[1], text: (m[2] || '').trim(), subs: [] }); continue; }
       m = l.match(/^[-–•]\s*(.+)$/);
       if (m && items.length) { items[items.length - 1].subs.push(m[1].trim()); continue; }
-      if (/^❗/.test(l) && items.length) { items[items.length - 1].subs.push(l); continue; }
+      if (/^[❗❕!]/.test(l) && items.length) { items[items.length - 1].subs.push(l); continue; }
+      // an unnumbered note right under an item ("видео высылается максимум на 5 карт…") belongs to that item
+      if (items.length && !/^\S+:$/.test(l)) { items[items.length - 1].notes = (items[items.length - 1].notes || []).concat(l); continue; }
       if (items.length) break;
     }
     if (!items.length) return null;
     for (const it of items) {
       it.type = it.text ? classifyItem(it.text) : (it.subs.length ? 'group' : 'unknown');
-      it.subTypes = it.subs.map(s => /^❗/.test(s) ? 'info' : classifyItem(s));
+      it.text = it.text || '';
+      it.subTypes = it.subs.map(s => /^[❗❕!]/.test(s) ? 'info' : classifyItem(s));
       if (it.type === 'defects' || it.type === 'info') it.subTypes = it.subTypes.map(() => 'info');
       it.needsListId = /порядков\S* номер|номер в оплате|ваш номер/i.test(it.text + ' ' + it.subs.join(' '));
       it.mentionsLottery = /лотере|замен|подбор/i.test(it.text + ' ' + it.subs.join(' '));
@@ -513,11 +528,19 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
   const FATAL_CODES = new Set([5, 14, 17, 1116]);
   class FatalVkError extends Error {}
   async function generate(opts) {
-    try { return await generateInner(opts); }
+    try { return await (opts.shop && opts.shop.mode === 'topics' ? generateTopicsWrapped(opts) : generateInner(opts)); }
     catch (e) {
       if (e instanceof FatalVkError) return { fatal: e.message, warnings: [] };
       throw e;
     }
+  }
+  async function generateTopicsWrapped(opts) {
+    const wrapped = Object.assign({}, opts, { api: async (m, p) => {
+      try { return await opts.api(m, p); }
+      catch (e) { const code = e && (e.error_code || (e.error && e.error.error_code)); if (FATAL_CODES.has(code)) throw new FatalVkError(code === 5 ? 'VK отклонил токен (ошибка авторизации). Обновите токен в настройках.' : 'VK требует подтверждения (капча/валидация): ' + errText(e)); throw e; }
+    } });
+    if (!opts.target || !(opts.target.vkId || opts.target.username)) return { fatal: 'Не задан получатель (VK ID или username).', warnings: [] };
+    return generateTopics(wrapped);
   }
   async function generateInner(opts) {
     const { shop, target, adminEmoji, boxInput, onProgress = () => {}, cache = {} } = opts;
@@ -859,10 +882,208 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     return out.join('\n');
   }
 
+
+  // ======================================================================
+  // Topic-based shops (e.g. myting): each box has a discussion topic where every admin comment is one order
+  // ("💒🐯 ·˚ ༘ яп #481 ✩‧₊˚ / [id..] 1,3 / статус: … / оплата: <link>"), and a "N кор коробка получена админкой 🐥"
+  // post names the shipping admin and links the photo album.
+  // ======================================================================
+  const DECOR = /[💒🎀♡·˚༘✩‧₊︎️]/gu;
+  function orderHeader(line) {
+    const raw = stripVS(line).trim();
+    const em = (raw.replace(/^[💒🎀\s]+/u, '').match(/^(\p{Extended_Pictographic})/u) || [])[1] || null;
+    const name = raw.replace(DECOR, ' ').replace(/^[^\p{L}\p{N}#]+/u, '').replace(/[^\p{L}\p{N}#)'"»]+$/u, '').replace(/\s+/g, ' ').trim();
+    return { name, emoji: em };
+  }
+  // the recipient's positions on one line: "[id..] 1,3" -> "1,3"; "ынче [id..]" -> "ынче"; "[id..] янг пос 2шт" -> "янг пос"
+  function positionsFromLine(line, hit) {
+    const L = stripVS(line);
+    const left = L.slice(0, hit.start).replace(/^[\s•·\-–—*]+/, '').replace(/[\s\-–—:]+$/, '').trim();
+    let right = L.slice(hit.end).replace(/^[\s\-–—:|]+/, '').trim();
+    right = right.replace(/\s*[-–—]?\s*\d[\d\s]*(р|руб\S*|₽)\.?\s*$/i, '').replace(/\s*\d+\s*шт\.?/gi, '').replace(/\s{2,}/g, ' ').replace(/[\s,]+$/, '').trim();
+    return [left, right].filter(x => x && !/^оплат/i.test(x)).join(' ').trim();
+  }
+  // a short label line inside an order ("А версия", "карты", "2 очередь:") — gives context to the positions under it
+  const isSectionLabel = l => {
+    const t = l.trim();
+    return t && t.length <= 30 && !/\[|@|https?:|\p{Extended_Pictographic}|^(статус|оплата)|можно забрать|отсрочка|[‼❗❕]/iu.test(t) && !/^\d+([,\s-]+\d+)*$/.test(t);
+  };
+  function parseOrderComment(text, target) {
+    const lines = stripVS(text).split('\n');
+    const head = orderHeader(lines[0] || '');
+    const res = { name: head.name, emoji: head.emoji, positions: [], links: [], payInDM: false, status: null, hits: 0, ambiguous: [], namesakes: [] };
+    let inPay = false, section = null;
+    const bySection = [];
+    lines.forEach((l, i) => {
+      if (/^\s*статус/i.test(l)) { res.status = l.replace(/^\s*статус\s*:?/i, '').trim(); inPay = false; return; }
+      if (/^\s*оплата(?![а-яё])/i.test(l)) { inPay = true; if (/в\s*лс/i.test(l)) res.payInDM = true; }
+      if (inPay || /^\s*оплата/i.test(l)) for (const m of l.matchAll(/(?:https?:\/\/)?(?:m\.)?vk\.(?:com|ru)\/wall(-\d+_\d+)/g)) if (!res.links.includes(m[1])) res.links.push(m[1]);
+      if (i === 0 || inPay) return;
+      if (isSectionLabel(l) && findTargetInLine(l, target).status === null) { section = l.trim().replace(/:$/, ''); return; }
+      const hit = findTargetInLine(l, target);
+      if (hit.status === 'match') {
+        res.hits++;
+        const p = positionsFromLine(l, hit);
+        let g = bySection.find(x => x.section === section);
+        if (!g) { g = { section, items: [] }; bySection.push(g); }
+        if (p) g.items.push(p);
+      }
+      else if (hit.status === 'name-only') res.ambiguous.push(l.trim());
+      else if (hit.status === 'namesake' || hit.status === 'conflict') res.namesakes.push(l.trim());
+    });
+    // "А версия: ынче, казуха; В версия: постер, ынче, казуха" — section labels only when the recipient is in more than one
+    const groups = bySection.filter(g => g.items.length);
+    if (groups.length > 1) res.positions = [groups.map(g => (g.section ? g.section + ': ' : '') + g.items.join(', ')).join('; ')];
+    else if (groups.length === 1) res.positions = groups[0].items;
+    return res;
+  }
+  const wallUrl = (shop, ref) => `https://${shop.linkDomain || 'vk.ru'}/wall${ref}`;
+
+  async function generateTopics(opts) {
+    const { shop, target, adminEmoji, boxInput, api, onProgress = () => {}, cache = {} } = opts;
+    const prog = m => onProgress(m);
+    const W = [], manual = [], sources = [];
+    const addSrc = (label, url) => { if (!sources.some(s => s.url === url)) sources.push({ label, url }); };
+    const admin = stripVS(adminEmoji || '').trim();
+    const { boxes, bad } = parseBoxes(shop, boxInput);
+    bad.forEach(b => W.push({ level: 'warn', text: `Не понял коробку «${b}» — пропущена. Формат: «23 кор, 2 кит, 11 яп».` }));
+    if (!boxes.length) return { fatal: 'Не указано ни одной коробки.', warnings: W };
+
+    prog('Читаю обсуждения шопа…');
+    const topics = cache.topics || (cache.topics = await (async () => { const all = []; for (let off = 0; ; ) { const r = await api('board.getTopics', { group_id: shop.groupId, count: 100, offset: off }); all.push(...r.items); off += r.items.length; if (!r.items.length || off >= r.count) break; } return all; })());
+    const topicUrl = t => `https://${shop.linkDomain}/topic-${shop.groupId}_${t.id}`;
+
+    // rules + template
+    let template = null;
+    try {
+      const cands = topics.filter(t => shop.shippingTopic.include.test(t.title) && stripVS(t.title).includes(admin));
+      const primary = cands.filter(t => !shop.shippingTopic.exclude.test(t.title));
+      let topic = primary[0] || null;
+      if (primary.length > 1) W.push({ level: 'error', text: `Найдено несколько обсуждений доставки для ${admin}. Выбрал первое, проверьте:`, links: primary.map(t => ({ label: t.title, url: topicUrl(t) })) });
+      if (!topic) W.push({ level: 'error', text: `Не найдено обсуждение доставки для администратора ${admin}. Заявка будет без шаблона.` });
+      const other = cands.filter(t => shop.shippingTopic.exclude.test(t.title));
+      if (other.length) W.push({ level: 'info', text: `Есть и другие обсуждения с ${admin} (не использованы): ${other.map(t => t.title).join('; ')}` });
+      if (topic) {
+        addSrc('Правила: ' + topic.title, topicUrl(topic));
+        const c = cache['rules' + topic.id] || (cache['rules' + topic.id] = await api('board.getComments', { group_id: shop.groupId, topic_id: topic.id, count: 3, sort: 'asc' }));
+        template = parseTemplate(c.items.filter(x => x.from_id < 0).map(x => x.text).join('\n\n'));
+        if (!template) W.push({ level: 'error', text: 'Не удалось найти шаблон заявки в правилах — собрал данные черновиком.', links: [{ label: topic.title, url: topicUrl(topic) }] });
+      }
+    } catch (e) { if (e instanceof FatalVkError) throw e; W.push({ level: 'error', text: 'Не удалось прочитать правила: ' + errText(e) }); }
+
+    const boxRes = [];
+    for (const b of boxes) {
+      const label = shop.boxLabel(b);
+      const r = { box: b, label, orders: [], allOrders: [], ok: false };
+      boxRes.push(r);
+      try {
+        // 1) receipt post: who has the box, which album
+        prog(`${label}: ищу пост получения…`);
+        const q = `${b.num} ${shop.shortWord[b.country]} коробка получена`;
+        const s = cache['ws:' + q] || (cache['ws:' + q] = await api('wall.search', { owner_id: -shop.groupId, query: q, count: 30 }));
+        const receipts = s.items.filter(p => p.post_type !== 'reply' && !p.post_id).map(p => ({ p, h: shop.parseReceipt(p.text || '') })).filter(x => x.h && x.h.country === b.country && x.h.num === b.num);
+        if (!receipts.length) W.push({ level: 'warn', text: `${label}: пост «коробка получена» не найден — возможно, коробка ещё не приехала. Администратора проверить не удалось.` });
+        else {
+          const rc = receipts[0];
+          r.receipt = rc.p.id; r.albumId = rc.h.albumId; r.admin = rc.h.emoji;
+          addSrc(`Получение ${label}`, wallUrl(shop, `-${shop.groupId}_${rc.p.id}`));
+          if (admin && rc.h.emoji && rc.h.emoji !== admin) {
+            r.wrongAdmin = rc.h.emoji;
+            W.push({ level: 'error', text: `Коробка ${label} получена админкой ${rc.h.emoji}, а выбран ${admin}. Коробка не включена в эту заявку — оформите для неё отдельную заявку у ${rc.h.emoji}.`, links: [{ label: 'пост получения', url: wallUrl(shop, `-${shop.groupId}_${rc.p.id}`) }] });
+            continue;
+          }
+          r.receiptNotes = (rc.p.text || '').split('\n').filter(l => /не\s*(приехал|пришл|пришел|пришёл)|приехал|ожидаем/i.test(l)).map(l => l.trim());
+          r.receiptMentions = (rc.p.text || '').split('\n').filter(l => !/^\s*\d+\.\s*[\[@]/.test(l) && findTargetInLine(l, target).status === 'match').map(l => l.trim());
+        }
+        // 2) the box topic
+        const bt = topics.filter(t => { const m = shop.boxTopic(t.title); return m && m.country === b.country && m.num === b.num; });
+        if (!bt.length) { W.push({ level: 'error', text: `Не найдено обсуждение с разборами для ${label}.` }); r.error = 'no-topic'; continue; }
+        if (bt.length > 1) W.push({ level: 'warn', text: `Для ${label} несколько обсуждений с разборами — читаю все.`, links: bt.map(t => ({ label: t.title, url: topicUrl(t) })) });
+        for (const t of bt) {
+          addSrc('Разборы ' + label, topicUrl(t));
+          prog(`${label}: читаю обсуждение с разборами…`);
+          const key = 'bt' + t.id;
+          const items = cache[key] || (cache[key] = await (async () => { const all = []; for (let off = 0; ; ) { const x = await api('board.getComments', { group_id: shop.groupId, topic_id: t.id, count: 100, offset: off, sort: 'asc' }); all.push(...x.items); off += x.items.length; if (!x.items.length || off >= x.count) break; } return all; })());
+          for (const c of items.filter(x => x.from_id < 0)) {
+            const o = parseOrderComment(c.text || '', target);
+            if (o.name) r.allOrders.push(o.name);
+            const commentUrl = `${topicUrl(t)}?post=${c.id}`;
+            if (o.hits) r.orders.push({ ...o, commentUrl });
+            if (o.ambiguous.length) W.push({ level: 'warn', text: `${label}, «${o.name}»: имя без ссылки на профиль — не принято автоматически:\n${o.ambiguous.join('\n')}`, links: [{ label: 'комментарий', url: commentUrl }] });
+          }
+        }
+        // 3) per-order checks
+        for (const o of r.orders) {
+          if (!o.links.length) {
+            W.push({ level: o.payInDM ? 'warn' : 'error', text: `${label}, «${o.name}»: ${o.payInDM ? 'оплата была в лс — ссылки на пост нет, приложите скрин оплаты' : 'нет ссылки на оплату'}.`, links: [{ label: 'комментарий', url: o.commentUrl }] });
+          }
+          for (const ref of o.links) addSrc(`Оплата «${o.name}»`, wallUrl(shop, ref));
+          if (o.status && shop.statusElsewhere && shop.statusElsewhere(o.status, b)) W.push({ level: 'warn', text: `${label}, «${o.name}»: статус «${o.status}» — возможно, позиция перенесена в другую коробку.`, links: [{ label: 'комментарий', url: o.commentUrl }] });
+          if (!o.positions.length && o.hits) o.positions = [];
+          for (const n of (r.receiptNotes || []).filter(n => /не\s*(приехал|пришл|пришел|пришёл)/i.test(n))) if (shop.sameOrder(n, o.name)) W.push({ level: 'error', text: `${label}: в посте получения сказано «${n}» — похоже, это ваша позиция «${o.name}». Проверьте, не нужно ли убрать её из заявки.`, links: [{ label: 'пост получения', url: wallUrl(shop, `-${shop.groupId}_${r.receipt}`) }] });
+        }
+        if ((r.receiptMentions || []).length) W.push({ level: 'warn', text: `${label}: получатель упомянут в посте получения отдельно — возможно, дополнительная позиция:\n${r.receiptMentions.join('\n')}`, links: [{ label: 'пост получения', url: wallUrl(shop, `-${shop.groupId}_${r.receipt}`) }] });
+        if (!r.orders.length) { W.push({ level: 'error', text: `В обсуждении ${label} нет позиций получателя.`, links: bt.map(t => ({ label: t.title, url: topicUrl(t) })) }); r.error = 'no-entries'; }
+        else r.ok = true;
+      } catch (e) {
+        if (e instanceof FatalVkError) throw e;
+        r.error = errText(e);
+        W.push({ level: 'error', text: `Коробка ${label}: ошибка запроса — ${errText(e)}. Можно повторить.` });
+      }
+    }
+    prog('Собираю заявку…');
+    const text = formatTopicRequest({ shop, template, boxRes, W, manual });
+    return { text, warnings: W, manual, sources, boxRes, template };
+  }
+
+  function formatTopicRequest({ shop, template, boxRes: allBoxes, W, manual }) {
+    for (const r of allBoxes.filter(r => r.wrongAdmin)) manual.push(`Коробка ${r.label} у администратора ${r.wrongAdmin} — нужна отдельная заявка.`);
+    const boxRes = allBoxes.filter(r => !r.wrongAdmin);
+    if (!boxRes.length) return '[нет коробок этого администратора — заявка не составлена]';
+    const multi = boxRes.length > 1;
+    const orderName = o => o.name + (o.positions.length ? ' — ' + o.positions.join(', ') : '');
+    const ordersBlock = () => { const out = []; for (const r of boxRes) { if (multi) out.push(`${r.label}:`); if (!r.orders.length) out.push(`[проверить вручную: позиции в ${r.label} не найдены]`); for (const o of r.orders) out.push(orderName(o)); } return out; };
+    const linksBlock = () => {
+      const out = [];
+      for (const r of boxRes) for (const o of r.orders) {
+        out.push(o.name + ':');
+        if (o.links.length) out.push(...o.links.map(ref => wallUrl(shop, ref)));
+        else out.push(o.payInDM ? '[оплата в лс — приложите скрин]' : `[добавить ссылку на оплату «${o.name}»]`);
+      }
+      return out;
+    };
+    for (const r of boxRes) for (const o of r.orders) if (!o.links.length) manual.push(o.payInDM ? `«${o.name}»: оплата была в лс — приложите скрин оплаты.` : `Добавьте ссылку на оплату «${o.name}».`);
+    const boxList = boxRes.map(r => r.label).join(', ');
+    if (!template) { manual.push('Оформите заявку по шаблону администратора вручную.'); return ['[черновик — шаблон не найден]', 'коробки: ' + boxList, ...ordersBlock(), ...linksBlock()].join('\n'); }
+    const types = template.items.map(i => i.type);
+    const combined = !types.includes('payment');      // no separate "link" item: put the link under each order
+    const out = [];
+    for (const it of template.items) {
+      const all = [it.type, ...it.subTypes];
+      let body = null;
+      if (it.type === 'box') body = [boxList];
+      else if (it.type === 'order' || it.type === 'group') body = combined ? boxRes.flatMap(r => [...(multi ? [r.label + ':'] : []), ...r.orders.flatMap(o => [orderName(o), ...(o.links.length ? o.links.map(ref => wallUrl(shop, ref)) : [o.payInDM ? '[оплата в лс — приложите скрин]' : `[добавить ссылку на оплату «${o.name}»]`])])]) : ordersBlock();
+      else if (it.type === 'payment') body = linksBlock();
+      else if (it.type === 'podbor') body = ['нет'];
+      else if (it.type === 'defects' || it.type === 'packaging') body = ['нет'];
+      else if (it.type === 'photo') { body = ['+']; manual.push(`Прикрепите фото позиций (пункт ${it.num} шаблона).`); }
+      else if (it.type === 'confirm') { body = ['+']; manual.push(`Пункт ${it.num}: ${it.text.replace(/\[(?:club|id)\d+\|([^\]]+)\]/g, '$1').replace(/[!]{2,}/g, '').replace(/\s+/g, ' ').trim()}`); }
+      else if (it.type === 'quantity') { body = ['[указать количество]']; manual.push(`Пункт ${it.num}: укажите количество карт/позиций — приложение их не считает.`); }
+      else if (it.type === 'shipping') { const m = shippingMethods(it.text); body = [m ? m.join('/') : 'способ доставки']; manual.push('Выберите службу доставки' + (m ? ` (${m.join('/')})` : '') + '.'); }
+      else if (it.type === 'info') continue;
+      else { body = [`[заполнить: ${it.text}]`]; W.push({ level: 'warn', text: `Пункт ${it.num} шаблона не распознан: «${it.text}».` }); }
+      if (all.includes('photo') && it.type !== 'photo' && it.type !== 'defects') body.push('+');
+      const n = /\./.test(it.num) ? it.num : it.num + '.';      // "3.1 нет", "4. нет"
+      if (body.length === 1 && !['order', 'group', 'payment'].includes(it.type)) out.push(`${n} ${body[0]}`);
+      else { out.push(n); out.push(...body); }
+    }
+    return out.join('\n');
+  }
+
   const api = {
     stripVS, norm, findTargetInLine, extractIdentifier, ordersInLine, parsePaymentHeader, headerCovers,
     sectionOrders, targetEntriesForOrder, parseShippingHeader, targetLinesInShipping, parseBoxes,
-    boxesHeldInRules, parseTemplate, classifyItem, shippingMethods, makeThrottled, generate, formatRequest, postLink
+    boxesHeldInRules, parseTemplate, classifyItem, shippingMethods, makeThrottled, generate, formatRequest, postLink, parseOrderComment, orderHeader, positionsFromLine
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipCore = api;
@@ -918,6 +1139,78 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
   if (typeof module !== 'undefined' && module.exports) module.exports = shop;
 })(typeof window !== 'undefined' ? window : globalThis);
 
+/* Shop config: "myting" (VK myting.shop, club204665358).
+ * Topic-based: every box has a topic "♡ корейские разборы (коробка №23)" whose admin comments are the orders
+ * (header line, participants, "статус: …", "оплата: <link>"). The shipping admin and the photo album come from
+ * the post "💒 23 кор коробка получена админкой 🐥 в г. челябинск … альбом с фотоотчетом: <album>".
+ */
+(function (root) {
+  'use strict';
+  const COUNTRY_ALIASES = {
+    'кор': ['кор', 'корея', 'корейская', 'корейск', 'kor'],
+    'кит': ['кит', 'китай', 'китайская', 'китайск', 'chn'],
+    'яп': ['яп', 'японская', 'японск', 'япония', 'jp'],
+  };
+  const words = Object.values(COUNTRY_ALIASES).flat().sort((a, b) => b.length - a.length);
+  const countryOf = (word) => {
+    const w = String(word || '').toLowerCase();
+    for (const [code, al] of Object.entries(COUNTRY_ALIASES)) if (al.some(a => w === a || (a.length > 2 && w.startsWith(a)))) return code;
+    return null;
+  };
+  const strip = s => String(s || '').replace(/[︎️‍]/g, '');
+  const sig = s => strip(s).toLowerCase().replace(/ё/g, 'е').match(/[\p{L}\p{N}#]+/gu) || [];
+
+  const shop = {
+    key: 'myting204665358',
+    name: 'myting',
+    groupId: 204665358,
+    linkDomain: 'vk.ru',
+    mode: 'topics',
+    countryWordRe: words.join('|'),
+    countryOf,
+    shortWord: { 'кор': 'кор', 'кит': 'кит', 'яп': 'яп' },
+    boxLabel: (b) => `${b.num} ${b.country}`,
+    shippingTopic: {
+      include: /доставк/i,
+      exclude: /самовывоз|раздач|консолидац|совместн|встреч/i,
+    },
+    // "♡ корейские разборы (коробка №23)", "♡︎ корейские разборы (коробка N°8)", "♡японские разборы(коробка №11)"
+    boxTopic(title) {
+      const t = strip(title).toLowerCase();
+      if (/архив/.test(t)) return null;
+      const m = t.match(/(корейск|китайск|японск)\S*\s*разбор\S*\s*\(?\s*коробка\s*(?:№|n°|no|n)?\s*(\d+)/);
+      return m ? { country: countryOf(m[1]), num: +m[2] } : null;
+    },
+    // "💒 23 кор коробка получена админкой 🐥в г. челябинск … альбом с фотоотчетом: …album-204665358_309732864"
+    parseReceipt(text) {
+      const t = strip(text);
+      const first = t.split('\n')[0].toLowerCase();
+      const m = first.match(/(\d+)\s*(кор|кит|яп)\S*\s*коробк\S*\s*получен/);
+      if (!m) return null;
+      const em = (t.split('\n')[0].match(/админк\S*\s*(\p{Extended_Pictographic})/u) || [])[1] || null;
+      // the link text is shortened ("album-204665358_3097...") — take the full id from the URL part
+      const ids = [...t.matchAll(/album-\d+_(\d+)(?!\d|\.\.\.)/g)].map(x => x[1]).sort((a, b) => b.length - a.length);
+      return { country: m[2], num: +m[1], emoji: em, albumId: ids.length ? +ids[0] : null };
+    },
+    // status mentioning a different box: "на кор 27 собрать дс" inside box 23's topic
+    statusElsewhere(status, box) {
+      const m = strip(status).toLowerCase().match(/(кор|кит|яп)\s*(\d+)/);
+      return !!(m && (countryOf(m[1]) !== box.country || +m[2] !== box.num));
+    },
+    // "не приехал кит личный #16" vs order "кит личный #16"
+    sameOrder(note, name) {
+      const a = sig(note), b = sig(name);
+      const na = a.filter(x => /^#?\d+/.test(x)).map(x => x.replace('#', '')), nb = b.filter(x => /^#?\d+/.test(x)).map(x => x.replace('#', ''));
+      if (nb.length) return nb.every(n => na.includes(n)) && b.some(w => !/\d/.test(w) && a.includes(w));
+      const words = b.filter(w => w.length > 2);
+      return words.length >= 2 && words.filter(w => a.includes(w)).length >= Math.min(3, words.length);
+    },
+  };
+  const SHOPS = (root.SHIP_SHOPS = root.SHIP_SHOPS || {});
+  SHOPS[shop.key] = shop;
+  if (typeof module !== 'undefined' && module.exports) module.exports = shop;
+})(typeof window !== 'undefined' ? window : globalThis);
+
 </script>
 <script>
 /* K-pipping — photo finder.
@@ -961,6 +1254,8 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     // short form: "кор7.2 (вторая часть ...)"
     let m = t.match(/(кор|кит|тай|яп)\s*(\d+)(?:\.(\d+))?/);
     if (m && !/коробк/.test(t.slice(0, m.index))) return { country: m[1], num: +m[2], part: m[3] ? +m[3] : null };
+    m = t.match(/(\d+)\s*(кор|кит|тай|яп)(?![а-я]{3})/);   // "отчет 23 кор коробка", "отчет 2кит"
+    if (m) return { country: m[2], num: +m[1], part: null };
     const words = t.match(/[а-я]+/g) || [];
     const ci = words.findIndex(w => Object.keys(COUNTRY_WORDS).some(c => w.startsWith(c)));
     if (ci < 0 || !/коробк/.test(t)) return null;
@@ -1081,7 +1376,12 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
       if (!rus) { onStatus && onStatus('Загружаю распознавание «колл»…'); rus = await Tesseract.createWorker('rus', 1, { workerBlobURL: true }); await rus.setParameters({ tessedit_char_whitelist: '#кол0123456789.', tessedit_pageseg_mode: '7' }); }
       return rus;
     }
-    return { digits, russian, async close() { if (dig) await dig.terminate(); if (rus) await rus.terminate(); dig = rus = null; } };
+    let lab = null;
+    async function labels() {
+      if (!lab) { onStatus && onStatus('Загружаю распознавание подписей…'); lab = await Tesseract.createWorker('rus', 1, { workerBlobURL: true }); await lab.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: RUS_WHITELIST }); }
+      return lab;
+    }
+    return { digits, russian, labels, async close() { for (const w of [dig, rus, lab]) if (w) await w.terminate(); dig = rus = lab = null; } };
   }
 
   // Normalise OCR text to an order token: "4076" or "колл284" / "колл308.4"
@@ -1167,8 +1467,175 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     return { tokens: (exact.length ? exact : keep).sort((a, b) => b.votes - a.votes || b.conf - a.conf) };
   }
 
-  function loadImage(url) {
-    return new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => rej(new Error('Не удалось загрузить фото')); i.src = url; });
+
+  // ======================================================================
+  // Label mode (topic shops like myting): photos carry a small white label with the order's name
+  // ("ле ссерафим предзы виверс к стандартам", "изна 38"). Read the label in Russian and match it
+  // against all order names of the box.
+  // ======================================================================
+  const STOP = new Set(['от', 'к', 'и', 'с', 'на', 'в', 'для', 'по', 'ver', 'вер', 'версия', 'разбор', 'кит', 'кор', 'предзаказ']);
+  // common short forms on labels
+  const CANON = [[/^(японск|япон|jp$)/, 'яп'], [/^(ввс|вв|weverse|виверс)/, 'виверс'], [/^(эпл|эппл|apple)/, 'эппл'], [/^(мьюзик|мюзик)/, 'мюзик']];
+  const canon = w => { for (const [re, c] of CANON) if (re.test(w)) return c; return w; };
+  const normLabel = s => String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[‘’'"«»“”]/g, '').replace(/[^\p{L}\p{N}#]+/gu, ' ').trim();
+  function tokens(s) {
+    const out = { words: [], nums: [] };
+    for (const t of normLabel(s).split(' ')) {
+      if (!t) continue;
+      const n = t.match(/^#?(\d+(?:\.\d+)?)$/);
+      if (n) out.nums.push(n[1]); else if (!STOP.has(t) && !/^разбор/.test(t)) out.words.push(canon(t.replace(/^#/, '')));
+    }
+    return out;
+  }
+  function lev(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 9;
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
+  // words match if equal, one is a prefix of the other (≥4 letters: "юмс"/"юм" handled by ≤1 edit), or ≤1 edit (≤2 for long words)
+  const wordEq = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) || (Math.min(a.length, b.length) >= 3 && lev(a, b) <= (Math.min(a.length, b.length) >= 7 ? 2 : 1));
+  // Word weights: a word found in many order names of the box ("ле", "ссерафим", "кики") says little;
+  // a rare one ("ммт", "хэллоулайв", "немо") identifies the order.
+  function weights(names) {
+    const df = new Map();
+    for (const n of names) for (const w of new Set(tokens(n).words)) df.set(w, (df.get(w) || 0) + 1);
+    const N = names.length || 1;
+    return w => { let d = df.get(w); if (d == null) { for (const [k, v] of df) if (wordEq(k, w)) { d = v; break; } } return Math.log((N + 1) / ((d || 0) + 0.5)); };
+  }
+  function wordOverlap(a, b, wt) {
+    if (!a.length || !b.length) return 0;
+    const W = wt || (() => 1);
+    const sum = arr => arr.reduce((s, x) => s + W(x), 0);
+    const hitA = sum(a.filter(x => b.some(y => wordEq(x, y)))), hitB = sum(b.filter(y => a.some(x => wordEq(x, y))));
+    const p = hitA / (sum(a) || 1), r = hitB / (sum(b) || 1);
+    return p + r ? (2 * p * r) / (p + r) : 0;
+  }
+  // 0..1 similarity between a photo label and an order name
+  // "янгпос" on a label vs "янг пос" in the topic (and the other way round): split a word that equals two neighbouring words of the other side
+  function splitJoined(a, b) {
+    const out = [];
+    for (const w of a) {
+      if (b.some(y => wordEq(w, y))) { out.push(w); continue; }
+      let hit = null;
+      for (let i = 0; i + 1 < b.length && !hit; i++) for (const n of [3, 2]) { const parts = b.slice(i, i + n); if (parts.length === n && wordEq(w, parts.join(''))) { hit = parts; break; } }
+      out.push(...(hit || [w]));
+    }
+    return out;
+  }
+  function labelScore(label, name, wt) {
+    const L = tokens(label), N = tokens(name);
+    L.words = splitJoined(L.words, N.words); N.words = splitJoined(N.words, L.words);
+    if (!L.words.length && !L.nums.length) return 0;
+    if (N.nums.length && L.nums.length && !N.nums.some(n => L.nums.includes(n))) return 0;   // different numbers: never the same order
+    const w = wordOverlap(L.words, N.words, wt);
+    if (N.nums.length && !L.nums.length) return 0.5 * w;
+    if (!N.nums.length && L.nums.length) return 0.6 * w;
+    return N.nums.length ? (w > 0 || !N.words.length ? 0.6 + 0.4 * w : 0.3) : w;
+  }
+  // best orders for one label: [{name, score}], sorted
+  function rankLabel(label, names, wt) {
+    wt = wt || weights(names);
+    return names.map(name => ({ name, score: labelScore(label, name, wt) })).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  }
+  // 'sure' when one of the recipient's orders clearly wins; 'maybe' when it is the best or nearly the best candidate
+  function classifyLabel(label, mine, all, wt) {
+    const ranked = rankLabel(label, all, wt);
+    if (!ranked.length) return { kind: null, ranked };
+    const top = ranked[0], second = ranked[1];
+    const sure = mine.includes(top.name) && top.score >= 0.6 && (!second || top.score - second.score >= 0.15);
+    if (sure) return { kind: 'sure', orders: [top.name], ranked };
+    const close = ranked.filter(r => mine.includes(r.name) && r.score >= 0.5 && (r.score >= top.score - 0.08 || (r.score >= 0.75 && r.score >= top.score - 0.15)));
+    return close.length ? { kind: 'maybe', orders: close.map(r => r.name), ranked } : { kind: null, ranked };
+  }
+
+  // White label chips: bright, unsaturated, wide components with dark text inside.
+  // th = brightness threshold. A chip lying on a white card merges with it at the default threshold, so a stricter one is tried next.
+  // open > 0: drop white runs shorter than `open` px in each row, which cuts the thin white gaps between cards that glue a chip to them.
+  function chipRegions(img, maxW, th, open) {
+    const k = Math.min(1, maxW / img.width), W = Math.round(img.width * k), H = Math.round(img.height * k);
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); x.drawImage(img, 0, 0, W, H);
+    const { lum, sat } = lumSat(x.getImageData(0, 0, W, H).data, W * H);
+    const m = new Uint8Array(W * H); for (let j = 0; j < W * H; j++) m[j] = (lum[j] > th && sat[j] < 28) ? 1 : 0;
+    if (open) for (let y = 0; y < H; y++) {
+      let st0 = -1;
+      for (let xx = 0; xx <= W; xx++) {
+        const on = xx < W && m[y * W + xx];
+        if (on && st0 < 0) st0 = xx;
+        if (!on && st0 >= 0) { if (xx - st0 < open) for (let z = st0; z < xx; z++) m[y * W + z] = 0; st0 = -1; }
+      }
+    }
+    const lab = new Int32Array(W * H); let n = 0; const comps = []; const st = [];
+    for (let p = 0; p < W * H; p++) {
+      if (!m[p] || lab[p]) continue;
+      n++; let x0 = W, y0 = H, x1 = 0, y1 = 0, cnt = 0; st.push(p); lab[p] = n;
+      while (st.length) {
+        const q = st.pop(), qx = q % W, qy = (q / W) | 0; cnt++;
+        if (qx < x0) x0 = qx; if (qx > x1) x1 = qx; if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+        if (qx > 0 && m[q - 1] && !lab[q - 1]) { lab[q - 1] = n; st.push(q - 1); }
+        if (qx < W - 1 && m[q + 1] && !lab[q + 1]) { lab[q + 1] = n; st.push(q + 1); }
+        if (qy > 0 && m[q - W] && !lab[q - W]) { lab[q - W] = n; st.push(q - W); }
+        if (qy < H - 1 && m[q + W] && !lab[q + W]) { lab[q + W] = n; st.push(q + W); }
+      }
+      comps.push({ x0, y0, x1, y1, w: x1 - x0 + 1, h: y1 - y0 + 1, cnt });
+    }
+    const isChip = o => o.h >= H * 0.015 && o.h <= H * 0.15 && o.w >= o.h * 1.8 && o.w <= W * 0.95 && o.cnt / (o.w * o.h) > 0.3 && o.cnt / (o.w * o.h) < 0.97;
+    return {
+      k, chips: comps.filter(isChip)
+        .map(o => { let dark = 0; for (let yy = o.y0; yy <= o.y1; yy++) for (let xx = o.x0; xx <= o.x1; xx++) if (lum[yy * W + xx] < 120) dark++; return { ...o, dark: dark / (o.w * o.h) }; })
+        .filter(o => o.dark > 0.02 && o.dark < 0.5).sort((p, q) => q.w * q.h - p.w * p.h).slice(0, 3),
+    };
+  }
+  // Section divider cards ("кики", "личные", "солянки"): one flat pastel colour with a little handwriting.
+  function isDivider(img) {
+    const S = 48, c = document.createElement('canvas'); c.width = S; c.height = S;
+    const x = c.getContext('2d'); x.drawImage(img, 0, 0, S, S); const a = x.getImageData(0, 0, S, S).data;
+    const px = []; for (let i = 0; i < a.length; i += 4) px.push([a[i], a[i + 1], a[i + 2]]);
+    const med = [0, 1, 2].map(ch => px.map(p => p[ch]).sort((u, v) => u - v)[px.length >> 1]);
+    const near = px.filter(p => Math.abs(p[0] - med[0]) + Math.abs(p[1] - med[1]) + Math.abs(p[2] - med[2]) < 36).length / px.length;
+    return near > 0.85 && (med[0] + med[1] + med[2]) / 3 > 170;
+  }
+  const RUS_WHITELIST = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ0123456789#.,&\'- ';
+  // -> { labels: [text], divider: bool }
+  // Passes: plain mask; then with thin gaps cut (chip glued to cards); then a stricter brightness (chip on a white card).
+  // Tesseract's confidence is low on many correct readings («айв хэллоулайв» ~20), so low-confidence text is kept;
+  // the next pass only runs when nothing confident was read.
+  const LABEL_PASSES = [[225, 0], [225, 8], [248, 0]];
+  async function readLabels(reader, img) {
+    if (isDivider(img)) return { labels: [], divider: true };
+    const rus = await reader.labels();
+    const out = [];
+    for (const [th, open] of LABEL_PASSES) {
+      const f = chipRegions(img, 1000, th, open);
+      let confident = false;
+      for (const L of f.chips) {
+        const sx = L.x0 / f.k, sy = L.y0 / f.k, sw = L.w / f.k, sh = L.h / f.k, s = Math.min(3, 80 / sh);
+        const c = document.createElement('canvas'); c.width = Math.round(sw * s); c.height = Math.round(sh * s);
+        c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        const r = await rus.recognize(c);
+        const t = (r.data.text || '').replace(/\s+/g, ' ').replace(/[.,'\s-]+$/, '').trim();
+        if (t.replace(/[^\p{L}\p{N}]/gu, '').length < 3) continue;
+        if (!out.includes(t)) out.push(t);
+        if ((r.data.confidence || 0) >= 50) confident = true;
+      }
+      if (confident) break;
+    }
+    return { labels: out, divider: false };
+  }
+
+  // A photo server sometimes never answers: give up after `ms` instead of waiting forever.
+  function loadImage(url, ms = 20000) {
+    return new Promise((res, rej) => {
+      const i = new Image(); i.crossOrigin = 'anonymous';
+      const t = setTimeout(() => { i.src = ''; rej(new Error('Фото не загрузилось вовремя')); }, ms);
+      i.onload = () => { clearTimeout(t); res(i); }; i.onerror = () => { clearTimeout(t); rej(new Error('Не удалось загрузить фото')); }; i.src = url;
+    });
+  }
+  // full-size first, then a smaller copy from another size slot
+  async function loadPhoto(p) {
+    try { return await loadImage(bestUrl(p, 1280)); }
+    catch (e) { return await loadImage(bestUrl(p, 600)); }
   }
   function bestUrl(photo, minW) {
     const s = [...(photo.sizes || [])].sort((a, b) => a.width - b.width);
@@ -1184,44 +1651,96 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
    * cache: object persisted by the caller: photoId -> tokens
    */
   async function scan({ api, shop, adminEmoji, boxes, Tesseract, cache = {}, onProgress = () => {}, shouldStop = () => false }) {
+    // onProgress(message, info) — info = { done, total, avgMs, remainingMs } once photos are being read
     const out = { boxes: [], warnings: [] };
     const reader = createReader(Tesseract, onProgress);
     try {
       onProgress('Ищу альбомы с получением…');
       const albums = [];
       for (let off = 0; ; ) { const r = await api('photos.getAlbums', { owner_id: -shop.groupId, offset: off, count: 100 }); albums.push(...r.items); off += r.items.length; if (!r.items.length || off >= r.count) break; }
+      // 1) list every box's photos first, so the total (and the time estimate) is known up front
+      const work = [];
       for (const b of boxes) {
         const res = { label: b.label, box: b.box, orders: b.orders, albums: [], matches: [], unread: [], missing: [], scanned: 0, total: 0 };
         out.boxes.push(res);
-        const f = findAlbums(albums, b.box, adminEmoji);
+        const f = b.albumIds && b.albumIds.length
+          ? { albums: b.albumIds.map(id => albums.find(a => a.id === id) || { id, title: b.label }), emojiMatched: true }
+          : findAlbums(albums, b.box, adminEmoji);
         if (!f.albums.length) { out.warnings.push({ level: 'error', text: `Альбом с получением для ${b.label} не найден.` }); res.missing = [...b.orders]; continue; }
         if (!f.emojiMatched) out.warnings.push({ level: 'warn', text: `Альбом ${b.label} найден, но без эмодзи ${adminEmoji} в названии — проверьте.` });
         res.albums = f.albums.map(a => ({ id: a.id, title: a.title, url: `https://${shop.linkDomain}/album-${shop.groupId}_${a.id}` }));
+        onProgress(`Считаю фото в альбоме ${b.label}…`);
         const photos = [];
         for (const a of f.albums) for (let off = 0; ; ) { const r = await api('photos.get', { owner_id: -shop.groupId, album_id: a.id, count: 1000, offset: off }); photos.push(...r.items); off += r.items.length; if (!r.items.length || off >= r.count) break; }
         res.total = photos.length;
+        work.push({ b, res, photos });
+      }
+      // 2) read them; the estimate uses the recent pace of photos that actually had to be read (cached ones are instant)
+      const total = work.reduce((n, w) => n + w.photos.length, 0);
+      let done = 0, avgMs = null;
+      const remainingUncached = () => work.reduce((n, w) => n + w.photos.slice(w.res.scanned).filter(p => !(w.b.mode === 'labels' ? cache['L' + p.id] : cache[p.id])).length, 0);
+      for (const { b, res, photos } of work) {
+        let prev = null;   // last labelled photo in this album (labels mode)
         for (const p of photos) {
           if (shouldStop()) { out.stopped = true; break; }
-          res.scanned++;
-          onProgress(`${b.label}: фото ${res.scanned} из ${photos.length}`);
+          res.scanned++; done++;
+          if (b.mode === 'labels') {
+            let rd = cache['L' + p.id];
+            if (Array.isArray(rd)) rd = { labels: rd };   // older cache format
+            if (!rd) {
+              const t0 = Date.now();
+              try { const img = await loadPhoto(p); rd = await readLabels(reader, img); cache['L' + p.id] = rd; }
+              catch (e) { rd = null; }
+              const ms = Date.now() - t0; avgMs = avgMs == null ? ms : avgMs * 0.8 + ms * 0.2;
+            }
+            onProgress(`${b.label}: фото ${res.scanned} из ${photos.length}`, { done, total, avgMs, remainingMs: avgMs == null ? null : Math.round(remainingUncached() * avgMs) });
+            const labs = (rd && rd.labels) || [];
+            const item = { id: p.id, thumb: bestUrl(p, 400), full: bestUrl(p, 2560), labels: labs };
+            if (rd && rd.divider) { prev = null; continue; }        // a new section starts: nothing carries over
+            const all = b.known && b.known.size ? [...b.known] : b.orders;
+            b._wt = b._wt || weights(all);
+            const verdicts = labs.map(l => classifyLabel(l, b.orders, all, b._wt));
+            if (!labs.length || verdicts.every(v => !v.ranked.length)) {   // no label, or only OCR noise that resembles no order
+              // a photo without a label right after one of the recipient's labelled photos (posters, back sides…)
+              if (prev && prev.orders.length && prev.run < 6) { prev.run++; (res.maybe = res.maybe || []).push({ ...item, orders: prev.orders, near: prev.label }); }
+              else res.unread.push(item);
+              continue;
+            }
+            const sure = verdicts.filter(v => v.kind === 'sure'), maybe = verdicts.filter(v => v.kind === 'maybe');
+            const so = [...new Set(sure.flatMap(v => v.orders))], mo = [...new Set(maybe.flatMap(v => v.orders))];
+            if (so.length) res.matches.push({ ...item, orders: so });
+            else if (mo.length) (res.maybe = res.maybe || []).push({ ...item, orders: mo });
+            prev = { orders: so.length ? so : mo, label: labs[0], run: 0 };
+            continue;
+          }
           let toks = cache[p.id];
           if (!toks) {
-            try { const img = await loadImage(bestUrl(p, 1280)); toks = (await readPhoto(reader, img, b.known)).tokens.map(t => ({ tok: t.tok, votes: t.votes, fuzzy: !!t.fuzzy })); cache[p.id] = toks; }
-            catch (e) { res.unread.push({ id: p.id, thumb: bestUrl(p, 300), full: bestUrl(p, 2560), err: String(e.message || e) }); continue; }
+            const t0 = Date.now();
+            try { const img = await loadPhoto(p); toks = (await readPhoto(reader, img, b.known)).tokens.map(t => ({ tok: t.tok, votes: t.votes, fuzzy: !!t.fuzzy })); cache[p.id] = toks; }
+            catch (e) { res.unread.push({ id: p.id, thumb: bestUrl(p, 300), full: bestUrl(p, 2560), err: String(e.message || e) }); }
+            const ms = Date.now() - t0;
+            avgMs = avgMs == null ? ms : avgMs * 0.8 + ms * 0.2;   // moving average: follows the current album's pace
           }
+          const remainingMs = avgMs == null ? null : Math.round(remainingUncached() * avgMs);
+          onProgress(`${b.label}: фото ${res.scanned} из ${photos.length}`, { done, total, avgMs, remainingMs });
+          if (!toks) continue;
           const item = { id: p.id, thumb: bestUrl(p, 400), full: bestUrl(p, 2560), tokens: toks.map(t => t.tok), fuzzy: toks.some(t => t.fuzzy) };
           if (!toks.length) { res.unread.push(item); continue; }
           const mine = b.orders.filter(o => toks.some(t => tokenMatchesOrder(t.tok, o)));
           if (mine.length) res.matches.push({ ...item, orders: mine });
         }
         res.missing = b.orders.filter(o => !res.matches.some(m => m.orders.includes(o)));
-        if (shouldStop()) break;
+        if (res.maybe) {   // a "maybe" label that points at an order already found for sure only keeps its other candidates
+          res.maybe = res.maybe.map(m => m.near ? m : { ...m, orders: m.orders.filter(o => res.missing.includes(o)) }).filter(m => m.orders.length);
+        }
+        res.maybeOnly = res.missing.filter(o => (res.maybe || []).some(m => m.orders.includes(o)));
+        if (shouldStop()) { out.stopped = true; break; }
       }
     } finally { await reader.close(); }
     return out;
   }
 
-  const api = { parseAlbumTitle, parseOrdinalWords, findAlbums, tokenFromDigits, tokenFromRussian, fuzzyKnown, tokenMatchesOrder, readPhoto, createReader, loadImage, bestUrl, scan };
+  const api = { isDivider, chipRegions, readLabels, labelScore, classifyLabel, rankLabel, parseAlbumTitle, parseOrdinalWords, findAlbums, tokenFromDigits, tokenFromRussian, fuzzyKnown, tokenMatchesOrder, readPhoto, createReader, loadImage, bestUrl, scan };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ShipPhotos = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1329,8 +1848,9 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
       const list = [];
       for (const t of r.items) {
         if (!sh.shippingTopic.include.test(t.title) || sh.shippingTopic.exclude.test(t.title)) continue;
-        const em = C.stripVS(t.title.replace(/^[★☆\s]+/, '').replace(/^[^\s]*доставк\S*/i, '')).trim();
-        if (em && !list.some(x => x.emoji === em)) list.push({ emoji: em, title: t.title });
+        // admin emojis in the title: "★ доставка 🐱", "♡ доставка г. челябинск настя 🐥", "доставка админки 🐯/🦇"
+        const ems = C.stripVS(t.title).match(/\p{Extended_Pictographic}/gu) || [];
+        for (const em of ems) if (!/[★☆♡]/.test(em) && !list.some(x => x.emoji === em)) list.push({ emoji: em, title: t.title });
       }
       S.adminCache[S.shopKey] = { t: Date.now(), list }; save(); renderAdmins();
       st.textContent = list.length ? '' : 'Обсуждения доставки не найдены.';
@@ -1411,12 +1931,58 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     });
   }
   let phStop = false, phRunning = false, phLast = null;
+  // Keep the screen on while a search runs (Android pauses pages that are off screen).
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) { /* not supported or refused — the search still works */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (phRunning && document.visibilityState === 'visible') keepAwake(true); });
+  function fmtLeft(ms) {
+    if (ms == null) return 'считаю, сколько осталось…';
+    const m = Math.round(ms / 60000);
+    if (ms < 45000) return 'осталось меньше минуты';
+    if (m < 60) return `осталось примерно ${m} мин`;
+    return `осталось примерно ${Math.floor(m / 60)} ч ${m % 60} мин`;
+  }
   function photoTile(item, label, unsure, checked) {
     const id = 'ph' + item.id;
-    return el('div', { class: 'ph' },
-      el('input', Object.assign({ type: 'checkbox', id, 'aria-label': 'выбрать фото ' + label, 'data-full': item.full, 'data-name': label }, checked ? { checked: '' } : {})),
-      el('a', { href: item.full, target: '_blank', rel: 'noopener noreferrer' }, el('img', { src: item.thumb, alt: label, loading: 'lazy', referrerpolicy: 'no-referrer' })),
+    const img = el('img', { src: item.thumb, alt: label, loading: 'lazy', referrerpolicy: 'no-referrer', 'data-pid': String(item.id) });
+    const retry = el('button', { type: 'button', class: 'phRetry', hidden: '' }, '↻ Загрузить');
+    img.addEventListener('error', () => { retry.hidden = false; });
+    img.addEventListener('load', () => { retry.hidden = true; });
+    retry.addEventListener('click', () => refreshPhotoLinks([item.id]));
+    return el('div', { class: 'ph', 'data-pid': String(item.id) },
+      el('input', Object.assign({ type: 'checkbox', id, 'aria-label': 'выбрать фото ' + label, 'data-full': item.full, 'data-name': label, 'data-pid': String(item.id) }, checked ? { checked: '' } : {})),
+      el('a', { href: item.full, target: '_blank', rel: 'noopener noreferrer' }, img), retry,
       el('span', { class: 'lbl' + (unsure ? ' unsure' : '') }, label));
+  }
+  // VK photo links stop working after a while (and a long search can outlast them): ask VK for fresh ones and reload the tiles.
+  async function refreshPhotoLinks(ids) {
+    ids = [...new Set(ids.map(String))];
+    if (!ids.length) return 0;
+    const P = window.ShipPhotos; let n = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+      const part = ids.slice(i, i + 50);
+      const r = await throttled('photos.getById', { photos: part.map(x => `-${shop().groupId}_${x}`).join(',') });
+      for (const p of (Array.isArray(r) ? r : (r && r.items) || [])) {
+        const thumb = P.bestUrl(p, 400), full = P.bestUrl(p, 2560);
+        for (const tile of document.querySelectorAll(`#phResults .ph[data-pid="${p.id}"]`)) {
+          const img = tile.querySelector('img'), a = tile.querySelector('a'), cb = tile.querySelector('input');
+          img.removeAttribute('loading'); img.src = thumb; a.href = full; cb.dataset.full = full;
+        }
+        n++;
+      }
+    }
+    return n;
+  }
+  async function reloadAllPhotos() {
+    const ids = [...document.querySelectorAll('#phResults .ph')].map(t => t.dataset.pid);
+    $('phStatus').textContent = 'Обновляю фото…'; $('phStatus').className = 'status';
+    try { const n = await refreshPhotoLinks(ids); $('phStatus').textContent = `Фото обновлены (${n}).`; }
+    catch (e) { $('phStatus').textContent = 'Не получилось обновить фото: ' + scrub(e && (e.error_msg || e.message) || e); $('phStatus').className = 'status err'; }
   }
   function renderPhotos(res) {
     const box = $('phResults'); box.textContent = '';
@@ -1427,13 +1993,20 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
       const sec = el('div', { style: 'display:grid;gap:8px' }, head);
       const found = b.orders.filter(o => !b.missing.includes(o));
       const was = o => (res.typo || {})[b.box.country + b.box.num + ':' + o];
+      const ord = o => (/^(\d|колл)/.test(o) ? '#' : '') + o;
+      const maybeOnly = b.maybeOnly || [];
       sec.append(el('div', { class: 'chipline' },
-        found.map(o => el('span', { class: 'pill' }, '#' + o + ' ✓' + (was(o) ? ` (в посте доставки #${was(o)} — фото подтверждает #${o})` : ''))),
-        b.missing.map(o => el('span', { class: 'pill miss' }, '#' + o + ' — нет фото' + (was(o) ? ` (в посте доставки #${was(o)})` : '')))));
-      if (b.matches.length) sec.append(el('div', { class: 'grid' }, b.matches.map(m => photoTile(m, b.box.country + b.box.num + ' ' + m.orders.map(o => '#' + o).join(' '), m.fuzzy, true))));
+        found.map(o => el('span', { class: 'pill' }, ord(o) + ' ✓' + (was(o) ? ` (в посте доставки #${was(o)} — фото подтверждает #${o})` : ''))),
+        maybeOnly.map(o => el('span', { class: 'pill maybe' }, ord(o) + ' — проверьте «возможно»')),
+        b.missing.filter(o => !maybeOnly.includes(o)).map(o => el('span', { class: 'pill miss' }, ord(o) + ' — нет фото' + (was(o) ? ` (в посте доставки #${was(o)})` : '')))));
+      const cap = m => m.near ? `без подписи, после «${m.near}» → ${m.orders.join(', ')}` : (m.labels && m.labels.length) ? `${m.labels[0]} → ${m.orders.join(', ')}` : b.box.country + b.box.num + ' ' + m.orders.map(ord).join(' ');
+      if (b.matches.length) sec.append(el('div', { class: 'grid' }, b.matches.map(m => photoTile(m, cap(m), m.fuzzy, true))));
+      if ((b.maybe || []).length) sec.append(el('div', { style: 'display:grid;gap:6px' },
+        el('span', { class: 'hint' }, `Возможно ваши (${b.maybe.length}): подпись похожа, но не уверен, или фото без подписи сразу после вашего. Отметьте нужные.`),
+        el('div', { class: 'grid' }, b.maybe.map(m => photoTile(m, cap(m), true, false)))));
       if (b.total) sec.append(el('span', { class: 'hint' }, `Просмотрено ${b.scanned} из ${b.total} фото.`));
       if (b.unread.length) sec.append(el('details', { class: 'more' },
-        el('summary', {}, `Номер не прочитан на ${b.unread.length} фото — посмотрите, нет ли там ваших`),
+        el('summary', {}, `${res.labelMode ? 'Подпись не прочитана' : 'Номер не прочитан'} на ${b.unread.length} фото — посмотрите, нет ли там ваших`),
         el('div', { class: 'grid', style: 'margin-top:8px' }, b.unread.map(u => photoTile(u, 'фото ' + u.id, true, false)))));
       box.append(sec);
     }
@@ -1452,7 +2025,11 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     const files = [];
     for (const [i, cb] of boxes.entries()) {
       $('phStatus').textContent = `Загружаю ${i + 1} из ${boxes.length}…`; $('phStatus').className = 'status';
-      const r = await fetch(cb.dataset.full, { referrerPolicy: 'no-referrer' });
+      let r = await fetch(cb.dataset.full, { referrerPolicy: 'no-referrer' }).catch(() => null);
+      if (!r || !r.ok) {   // stale link: get a fresh one and try once more
+        await refreshPhotoLinks([cb.dataset.pid]);
+        r = await fetch(cb.dataset.full, { referrerPolicy: 'no-referrer' });
+      }
       if (!r.ok) throw new Error('VK не отдал фото (' + r.status + ')');
       const blob = await r.blob();
       const name = cb.dataset.name.replace(/[^\p{L}\p{N}#._ -]+/gu, '').replace(/\s+/g, '_').slice(0, 60) + '.jpg';
@@ -1465,26 +2042,43 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     const r = last.r;
     // a suspected typo (#4261 in the shipping post, recipient paid #4262) -> look for the corrected number's photo
     const typo = {};
+    const topicShop = shop().mode === 'topics';
     const boxes = (r.boxRes || []).filter(b => !b.wrongAdmin && b.orders.length).map(b => {
+      if (topicShop) {   // labels on photos are matched against the order names from the box topic
+        const orders = b.orders.map(o => o.name);
+        return { box: b.box, label: shop().boxLabel(b.box), orders, known: new Set([...(b.allOrders || []), ...orders]), albumIds: b.albumId ? [b.albumId] : null, mode: 'labels' };
+      }
       const orders = b.orders.map(o => { const sg = b.found && b.found[o] && b.found[o].suggest; if (sg) { typo[b.box.country + b.box.num + ':' + sg.order] = o; return sg.order; } return o; });
       return { box: b.box, label: shop().boxLabel(b.box), orders, known: new Set([...(b.allOrders || []), ...orders]) };
     });
     if (!boxes.length) { $('phProgress').textContent = 'Нет заказов, для которых искать фото.'; return; }
     phRunning = true; phStop = false; $('phGo').disabled = true; $('phStop').hidden = false; $('phResults').textContent = ''; $('phSave').hidden = true;
-    const prog = m => { $('phProgress').textContent = m; };
+    $('phAwake').hidden = false; keepAwake(true);
+    const prog = (m, info) => {
+      if (info && info.total) {
+        $('phProgress').textContent = `${m} · всего ${info.done} из ${info.total} · ${fmtLeft(info.remainingMs)}`;
+        $('phBar').hidden = false; $('phBar').max = info.total; $('phBar').value = info.done;
+      } else $('phProgress').textContent = m;
+    };
     try {
       prog('Загружаю модуль распознавания…');
+      const startedAt = Date.now();
       const T = await loadTesseract();
       let tick = 0;
       const res = await window.ShipPhotos.scan({ api, shop: shop(), adminEmoji: last.admin, boxes, Tesseract: T, cache: photoCache,
-        onProgress: m => { prog(m); if (++tick % 10 === 0) savePhotoCache(); }, shouldStop: () => phStop });
-      savePhotoCache(); phLast = res; res.typo = typo;
+        onProgress: (m, info) => { prog(m, info); if (++tick % 10 === 0) savePhotoCache(); }, shouldStop: () => phStop });
+      savePhotoCache(); phLast = res; res.typo = typo; res.labelMode = topicShop;
       renderPhotos(res);
+      if (Date.now() - startedAt > 30 * 60 * 1000) {   // links listed at the start may have expired by now
+        prog('Обновляю ссылки на фото…');
+        try { await refreshPhotoLinks([...document.querySelectorAll('#phResults .ph')].map(t => t.dataset.pid)); } catch (e) { /* tiles keep their own ↻ buttons */ }
+      }
       const total = res.boxes.reduce((s, b) => s + b.orders.length, 0), got = res.boxes.reduce((s, b) => s + b.orders.length - b.missing.length, 0);
-      prog((res.stopped ? 'Остановлено. ' : '') + `Найдены фото для ${got} из ${total} разборов.`);
+      const maybeN = res.boxes.reduce((s, b) => s + (b.maybeOnly || []).length, 0);
+      prog((res.stopped ? 'Остановлено. ' : '') + `Найдены фото для ${got} из ${total} разборов` + (maybeN ? `, ещё ${maybeN} — среди «возможно»` : '') + '.');
     } catch (e) {
       prog('Не получилось: ' + scrub(e && (e.error_msg || e.message) || e));
-    } finally { phRunning = false; $('phGo').disabled = false; $('phStop').hidden = true; $('phGo').textContent = 'Искать заново'; }
+    } finally { phRunning = false; keepAwake(false); $('phAwake').hidden = true; $('phBar').hidden = true; $('phGo').disabled = false; $('phStop').hidden = true; $('phGo').textContent = 'Искать заново'; }
   }
 
   // ---------- wiring ----------
@@ -1511,6 +2105,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
   $('phGo').addEventListener('click', runPhotos);
   $('phStop').addEventListener('click', () => { phStop = true; $('phProgress').textContent = 'Останавливаю…'; });
   $('phResults').addEventListener('change', updateSaveCount);
+  $('phReload').addEventListener('click', reloadAllPhotos);
   $('phDownload').addEventListener('click', async () => {
     const st = $('phStatus');
     try {
