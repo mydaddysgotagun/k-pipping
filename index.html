@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Balsamiq+Sans:wght@400;700&family=Comfortaa:wght@500;600;700&family=Unbounded:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Balsamiq+Sans:wght@400;700&family=Comfortaa:wght@500;600;700&family=M+PLUS+Rounded+1c:wght@400&family=Unbounded:wght@500;600;700&display=swap">
 <style>
 /* Layout: one narrow column, form → progress → result; settings tucked in a sheet at the bottom. */
 /* Palette taken from the icon: icy watercolour blues + lilac, with the icon's magenta as the second accent. */
@@ -26,6 +26,7 @@
   --err: #b3261e; --err-soft: #fbe9e7; --warn: #8a5a00; --warn-soft: #fdf1d8; --info: #1d6a8a; --info-soft: #e2f1f7;
   --font: "Balsamiq Sans", "Segoe UI", Roboto, system-ui, sans-serif;     /* values, text, request */
   --label: "Comfortaa", "Balsamiq Sans", system-ui, sans-serif;           /* field names */
+  --note: "M PLUS Rounded 1c", system-ui, sans-serif;                      /* explanatory notes */
   --display: "Unbounded", "Balsamiq Sans", system-ui, sans-serif;          /* app name, headings, main buttons */
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --r: 18px;
@@ -55,7 +56,18 @@ h1 { font: 600 1.45rem/1.1 var(--display); margin: 0; letter-spacing: -0.02em; b
 h2 { font: 600 .74rem/1.3 var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin: 0; }
 .card { background: var(--surface); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .55); display: grid; gap: 14px; min-width: 0; }
 label.f, .flabel { display: grid; gap: 6px; font: 700 .88rem/1.3 var(--label); letter-spacing: .01em; }
-label.f .hint { font-family: var(--font); }
+div.f { display: grid; gap: 8px; }
+.note, label.f .note { font: 400 .74rem/1.3 var(--note); color: var(--muted); opacity: .85; letter-spacing: .01em; }
+select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238aaebb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 16px center; background-color: var(--surface-2); }
+button:not(.primary):not(.chip) { font-family: var(--label); }
+button.link.quiet { color: var(--muted); font-size: .76rem; font-weight: 600; opacity: .75; justify-self: start; }
+#tokenHelp { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+#tokenHelp p, #tokenHelp ol { margin: 0; }
+#tokenHelp ol { padding-left: 1.3em; display: grid; gap: 4px; }
+#tokenHelp a { color: var(--accent); }
+#tokenHelp b { color: var(--fg); font-weight: 700; }
 .hint { font-size: .8rem; color: var(--muted); font-weight: 400; }
 select, input[type=text], input[type=password], textarea {
   font: 400 1rem/1.4 var(--font); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
@@ -69,7 +81,7 @@ button { font: inherit; font-weight: 700; border-radius: 12px; border: 1px solid
 button:active:not([disabled]) { transform: scale(.98); }
 button.primary { background: var(--grad); color: var(--accent-fg); border: 0; padding: 15px; font: 600 1rem/1.2 var(--display); letter-spacing: .01em; width: 100%; box-shadow: 0 8px 24px -10px var(--glow2); }
 button[disabled] { opacity: .55; cursor: default; }
-button.link { border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 500; }
+button.link { border: 0; background: none; padding: 4px 0; color: var(--accent); font-weight: 700; font-size: .88rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { min-width: 46px; height: 46px; padding: 0 10px; font-size: 1.35rem; border-radius: 23px; line-height: 1; }
 .chip[aria-pressed="true"] { background: var(--accent2-soft); border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2), 0 0 14px -4px var(--accent2); }
@@ -86,6 +98,7 @@ button.link { border: 0; background: none; padding: 4px 0; color: var(--accent);
 .tag { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
 .w.error .tag { color: var(--err); } .w.warn .tag { color: var(--warn); } .w.info .tag { color: var(--info); }
 .fatal { background: var(--err-soft); border: 1px solid var(--err); color: var(--fg); border-radius: var(--r); padding: 14px; }
+details.settings .sbody { display: grid; gap: 14px; margin-top: 14px; }
 details.settings > summary { cursor: pointer; font: 700 1rem/1.3 var(--label); list-style: none; display: flex; justify-content: space-between; }
 details.settings > summary::after { content: "▾"; color: var(--muted); }
 details.settings[open] > summary::after { content: "▴"; }
@@ -123,12 +136,11 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
 
   <div id="noToken" class="w warn" hidden><span class="tag">Настройка</span>Добавьте токен VK внизу, в «Настройках», — без него приложение не может читать посты.</div>
 
-  <section class="card" aria-labelledby="h-form">
-    <h2 id="h-form">Что отправить</h2>
+  <section class="card" aria-label="Заявка на доставку">
     <label class="f" for="target">Получатель
       <div class="row"><select id="target"></select></div>
     </label>
-    <label class="f" for="shop">Магазин
+    <label class="f" for="shop">Шоп
       <select id="shop"></select>
     </label>
     <div class="f" role="group" aria-labelledby="l-admin">
@@ -141,7 +153,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     </div>
     <label class="f" for="boxes">Коробки
       <input type="text" id="boxes" inputmode="text" autocomplete="off" placeholder="105 кор, 15 кит">
-      <span class="hint">список коробок через запятую, пример - 105 кор, 15 кит</span>
+      <span class="note">список коробок через запятую, пример - 105 кор, 15 кит</span>
     </label>
     <button type="button" class="primary" id="go">Составить заявку</button>
     <div id="progress" aria-live="polite"></div>
@@ -162,7 +174,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     <div id="todoWrap" hidden><h2>Дополнить вручную</h2><ul class="list todo" id="todo"></ul></div>
     <div id="warnWrap" hidden style="display:grid;gap:8px"><h2>Проверить</h2><div id="warns" style="display:grid;gap:8px"></div></div>
     <div><h2>Источники</h2><ul class="list src" id="sources"></ul></div>
-    <button type="button" class="link" id="diag">Скопировать отчёт для отладки (без токена)</button>
+    <button type="button" class="link quiet" id="diag">Скопировать отчёт для отладки</button>
   </section>
 
   <section class="card" id="photos" hidden aria-labelledby="h-ph">
@@ -170,7 +182,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
       <h2 id="h-ph">Фото с получением</h2>
       <button type="button" id="phStop" hidden>Остановить</button>
     </div>
-    <p class="hint" id="phIntro" style="margin:0">Найду в альбомах коробок фото ваших разборов по номерам или подписям на фото. Текст читается прямо на телефоне; каждый поиск начинается с загрузки модуля распознавания (несколько МБ).</p>
+    <p class="note" id="phIntro" style="margin:0">Найду в альбомах коробок фото ваших разборов по номерам или подписям на фото. Текст читается прямо на телефоне; каждый поиск начинается с загрузки модуля распознавания (несколько МБ).</p>
     <button type="button" class="primary" id="phGo">Найти мои фото</button>
     <div id="phAwake" class="w info" hidden><span class="tag">Важно</span>Можно переключаться на другие приложения, но не блокируйте экран — иначе поиск встанет на паузу. Пока идёт поиск, экран сам не погаснет.</div>
     <progress id="phBar" hidden value="0" max="1" aria-label="Прогресс поиска фото"></progress>
@@ -186,10 +198,26 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
 
   <details class="card settings" id="settings">
     <summary>Настройки</summary>
+    <div class="sbody">
     <label class="f" for="token">Токен VK
       <input type="password" id="token" autocomplete="off" placeholder="вставьте токен" spellcheck="false">
-      <span class="hint">Хранится только на этом устройстве. Не попадает в заявку, отчёт и адресную строку.</span>
+      <span class="note">Хранится только на этом устройстве. Не попадает в заявку, отчёт и адресную строку.</span>
     </label>
+    <button type="button" class="link" id="tokenHelpBtn" aria-expanded="false" aria-controls="tokenHelp" style="justify-self:start">Что такое токен и как его получить?</button>
+    <div id="tokenHelp" class="note" hidden>
+      <p><b>Что это.</b> Приложению нужен «сервисный ключ» ВКонтакте — ключ, с которым можно читать открытые посты, обсуждения и фотоальбомы шопов. Его выдаёт ваше собственное мини-приложение ВК: оно может быть пустым, писать код не нужно. Пароль от ВК k-pipping не нужен, и к вашему аккаунту ключ доступа не даёт.</p>
+      <p><b>Как получить</b> (лучше с компьютера или в полной версии сайта ВК):</p>
+      <ol>
+        <li>Откройте <a href="https://dev.vk.com/ru/admin/apps-list" target="_blank" rel="noopener noreferrer">dev.vk.com → Приложения</a> и войдите в ВК.</li>
+        <li>Нажмите «Создать приложение». Тип — «Мини-приложение», название любое (например, k-pipping), категория любая. Нажмите «Создать» и подтвердите действие — например, в приложении ВК на телефоне.</li>
+        <li>В настройках созданного приложения в меню слева откройте «Разработка → Ключи доступа».</li>
+        <li>В блоке «Сервисный ключ» нажмите «Показать» → «Просмотреть», подтвердите и скопируйте ключ.</li>
+        <li>Вставьте его сюда, нажмите «Сохранить токен», затем «Проверить доступ».</li>
+      </ol>
+      <p>Ключ хранится только на этом телефоне и отправляется только во ВКонтакте. Никому его не пересылайте. Если он мог попасть к кому-то, выпустите новый там же: «Создать новый» → «Сменить» — старый перестанет работать.</p>
+      <p>Закрытые шопы с сервисным ключом, скорее всего, не прочитаются — он видит только открытые.</p>
+      <p><a href="https://dev.vk.com/ru/mini-apps/settings/development/keys" target="_blank" rel="noopener noreferrer">Документация ВК о ключах доступа</a></p>
+    </div>
     <div class="row">
       <button type="button" id="saveToken">Сохранить токен</button>
       <button type="button" id="checkToken">Проверить доступ</button>
@@ -202,6 +230,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
     <h2>Получатели</h2>
     <div id="people" style="display:grid;gap:10px"></div>
     <button type="button" id="addPerson">Добавить получателя</button>
+    </div>
   </details>
 </main>
 
@@ -1869,7 +1898,7 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
   function renderAdmins() {
     const list = (S.adminCache[S.shopKey] || {}).list || [];
     const box = $('admins'); box.textContent = '';
-    if (!list.length) box.append(el('span', { class: 'hint' }, token ? 'Нажмите «Обновить список».' : 'Список появится после добавления токена.'));
+    if (!list.length) box.append(el('span', { class: 'note' }, token ? 'Нажмите «Обновить список».' : 'Список появится после добавления токена.'));
     for (const a of list) box.append(el('button', { type: 'button', class: 'chip', 'aria-pressed': String(a.emoji === S.admin), title: a.title, onclick: () => { S.admin = a.emoji; $('adminManual').value = ''; save(); renderAdmins(); } }, a.emoji));
     if (S.admin && !list.some(a => a.emoji === S.admin)) $('adminManual').value = S.admin;
   }
@@ -2124,10 +2153,11 @@ details.more > summary { cursor: pointer; font-size: .9rem; color: var(--muted);
   $('go').addEventListener('click', run);
   $('retry').addEventListener('click', () => { if (last) { $('boxes').value = last.boxInput; $('adminManual').value = S.admin === last.admin ? '' : last.admin; run(); } });
   $('copy').addEventListener('click', () => copyText($('out').value, $('copyStatus'), 'Скопировано.'));
+  $('tokenHelpBtn').addEventListener('click', () => { const h = $('tokenHelp'); h.hidden = !h.hidden; $('tokenHelpBtn').setAttribute('aria-expanded', String(!h.hidden)); });
   $('diag').addEventListener('click', () => {
     if (!last) return;
     const r = last.r;
-    const rep = ['Отчёт ' + last.at.toISOString(), 'Магазин: ' + shop().name, 'Администратор: ' + last.admin, 'Коробки: ' + last.boxInput,
+    const rep = ['Отчёт ' + last.at.toISOString(), 'Шоп: ' + shop().name, 'Администратор: ' + last.admin, 'Коробки: ' + last.boxInput,
       'Получатель: ' + JSON.stringify(Object.assign({}, S.targets[S.targetIdx])),
       '', '--- Заявка ---', $('out').value, '', '--- Предупреждения ---',
       ...(r.warnings || []).map(w => `[${w.level}] ${w.text}${w.links ? ' ' + w.links.map(l => l.url).join(' ') : ''}`),

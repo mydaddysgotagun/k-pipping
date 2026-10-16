@@ -3,8 +3,8 @@
  "short_name": "k-pipping",
  "description": "Заявки на доставку из VK-шопов",
  "display": "standalone",
- "background_color": "#bfe6ee",
- "theme_color": "#8a3f6b",
+ "background_color": "#08131b",
+ "theme_color": "#08131b",
  "start_url": "./",
  "scope": "./",
  "icons": [
